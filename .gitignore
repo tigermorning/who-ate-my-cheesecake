@@ -1,0 +1,6 @@
+# 실제 키가 들어 있는 파일
+.env
+
+node_modules/
+.DS_Store
+*.log

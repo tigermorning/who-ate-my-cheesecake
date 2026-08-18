@@ -1,0 +1,736 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Who Ate My Cheesecake?</title>
+<style>
+:root{
+  --cream:#FFF6E9; --cream-2:#FFEFD9; --ink:#4A3728; --ink-soft:#7A6250;
+  --line:#E7D3B8; --accent:#E8894A; --accent-2:#F6B26B; --good:#7BB26A; --bad:#D9705E;
+  --card:#FFFDF8; --shadow:0 2px 0 #E7D3B8, 0 8px 24px rgba(120,90,60,.13);
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(1200px 600px at 50% -10%,#FFF9F0,#F6E7D2 70%);
+  color:var(--ink);font:15px/1.6 "Pretendard","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif}
+h1,h2,h3{margin:0;font-weight:800;letter-spacing:-.02em}
+.wrap{max-width:1180px;margin:0 auto;padding:18px 16px 40px}
+header.top{display:flex;align-items:center;gap:14px;margin-bottom:14px}
+.logo{font-size:22px;font-weight:900}
+.logo small{display:block;font-size:11px;font-weight:600;color:var(--ink-soft);letter-spacing:.06em}
+.chip{margin-left:auto;display:flex;gap:8px;align-items:center}
+.pill{background:var(--card);border:1.5px solid var(--line);border-radius:999px;padding:6px 12px;font-weight:700;font-size:13px;box-shadow:var(--shadow)}
+.grid{display:grid;grid-template-columns:300px minmax(0,1fr) 300px;gap:14px}
+@media (max-width:1000px){.grid{grid-template-columns:1fr}}
+.card{background:var(--card);border:1.5px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:14px}
+.card h3{font-size:13px;color:var(--ink-soft);letter-spacing:.08em;margin-bottom:10px}
+
+/* 인물 목록 */
+.who{display:flex;align-items:center;gap:10px;padding:8px;border-radius:14px;cursor:pointer;border:1.5px solid transparent}
+.who:hover{background:var(--cream)}
+.who.on{background:var(--cream-2);border-color:var(--accent-2)}
+.who .sp{width:56px;height:56px;image-rendering:pixelated;background-repeat:no-repeat;flex:0 0 auto}
+.who b{display:block;font-size:15px}
+.who span{font-size:12px;color:var(--ink-soft)}
+
+/* 대화 */
+.stage{border-radius:14px;border:1.5px solid var(--line);overflow:hidden;position:relative;background:#2A1F18;line-height:0}
+#scene{width:100%;height:auto;image-rendering:pixelated;cursor:pointer;display:block}
+.roomtag{position:absolute;left:12px;top:10px;font-size:12px;font-weight:800;color:#fff;
+  background:rgba(50,34,22,.62);padding:4px 10px;border-radius:999px;line-height:1.4}
+.log{height:260px;overflow:auto;padding:6px 2px;display:flex;flex-direction:column;gap:10px;margin-top:10px}
+.msg{max-width:82%;padding:10px 13px;border-radius:16px;white-space:pre-wrap}
+.msg.npc{background:var(--cream);border:1.5px solid var(--line);border-bottom-left-radius:6px;align-self:flex-start}
+.msg.me{background:#FFE3CC;border:1.5px solid #F2C79A;border-bottom-right-radius:6px;align-self:flex-end}
+.msg .nm{display:block;font-size:11px;font-weight:800;color:var(--accent);margin-bottom:3px}
+.ask{display:flex;gap:8px;margin-top:10px}
+.ask input{flex:1;padding:12px 14px;border-radius:14px;border:1.5px solid var(--line);background:#fff;font:inherit}
+.ask input:focus{outline:2px solid var(--accent-2);outline-offset:1px}
+button{font:inherit;font-weight:800;border-radius:14px;border:1.5px solid var(--line);background:var(--card);
+  padding:10px 14px;cursor:pointer;box-shadow:var(--shadow)}
+button.primary{background:var(--accent);border-color:#D2762F;color:#fff}
+button:disabled{opacity:.5;cursor:default}
+.quick{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.quick button{padding:6px 10px;font-size:12.5px;font-weight:700;border-radius:999px}
+
+/* 증언판 */
+table{border-collapse:collapse;width:100%;font-size:11px}
+th,td{border:1px solid var(--line);padding:3px 2px;text-align:center;height:26px}
+th{background:var(--cream);font-size:10.5px;color:var(--ink-soft)}
+td.conflict{background:#FFE2DC;color:#B4442F;font-weight:800}
+td.own{background:#EFF7EA}
+.note{font-size:12px;color:var(--ink-soft)}
+dialog{border:none;border-radius:20px;padding:0;box-shadow:0 20px 60px rgba(90,60,30,.3);max-width:520px}
+dialog::backdrop{background:rgba(60,40,25,.45)}
+.dlg{padding:22px;background:var(--card)}
+.dlg h2{font-size:20px;margin-bottom:8px}
+.sel{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 4px}
+.sel button.on{background:var(--accent-2);border-color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="logo">Who Ate My Cheesecake?<small>SPUM · SAM</small></div>
+    <div class="chip">
+      <span class="pill" id="pillTalk">대화 0</span>
+      <span class="pill" id="pillLLM">…</span>
+      <button id="btnNew">새 판</button>
+      <button class="primary" id="btnAccuse">지목하기</button>
+    </div>
+  </header>
+
+  <section class="card" style="padding:8px;margin-bottom:14px">
+    <div class="stage" id="stage">
+      <canvas id="scene" width="960" height="720"></canvas>
+      <div class="roomtag" id="roomtag"></div>
+    </div>
+  </section>
+
+  <div class="grid">
+    <section class="card">
+      <h3>하우스메이트</h3>
+      <div id="roster"></div>
+      <p class="note" id="myrole" style="margin-top:10px"></p>
+    </section>
+
+    <section class="card">
+      <h3>대화</h3>
+      <div class="log" id="log"></div>
+      <div class="ask">
+        <input id="say" placeholder="말을 걸어 본다…" autocomplete="off">
+        <button class="primary" id="send">말한다</button>
+      </div>
+      <div class="quick" id="quick"></div>
+    </section>
+
+    <section class="card">
+      <h3>증언판 — 누가 어디 있었다고 했나</h3>
+      <div id="board"></div>
+      <p class="note" style="margin-top:8px">● 본인 진술 · ○ 목격 · 빨강은 같은 시각에 두 곳</p>
+    </section>
+  </div>
+</div>
+
+<dialog id="dlg"><div class="dlg" id="dlgBody"></div></dialog>
+
+<script type="module">
+import { makeRound, knowledgeOf, nameOf, ROOMS, HOURS, CAST } from './round.mjs';
+import { buildMessages, violations, classifyIntent, MODEL } from './dialogue.mjs';
+import { W as HW, H as HH, PATCH, RUGS, DECOR, PROPS, SPOT, ZONES,
+         roomOf, floorOf, isDoor, isWall, buildBlocked } from './house.mjs';
+
+const $ = s => document.querySelector(s);
+const el = (t, c, x) => { const e = document.createElement(t); if (c) e.className = c; if (x != null) e.textContent = x; return e; };
+
+const SPRITE = { sgn_kyle: '카일', sgn_mira: '미라', sgn_dorn: '도른', sgn_howell: '하웰', sgn_ben: '벤' };
+
+// ── 집 그리기 재료 ──────────────────────────────────────────
+// 타일시트는 16×16 칸(한 칸 64px). 좌표는 눈으로 골랐다.
+const T = {
+  woodFloor: [[6,0],[6,1]], stoneFloor: [[1,4],[2,4],[0,4]], rug: [[9,4],[9,7],[5,6]],
+  grass: [[0,7],[1,7],[2,7],[3,7]], grassFlower: [[0,8],[1,8],[4,7],[2,8]],
+  water: [[1,5],[2,5],[3,5],[4,5]],
+  wall: [[5,0],[5,1],[5,2],[3,1]], wallTop: [[4,4],[5,4]],
+  door: [[3,4],[6,7],[10,5],[11,3]],
+  hearthTop: [6,5], hearthFire: [6,6],
+  tableL: [10,1], tableM: [11,1], tableR: [12,1],
+  tableL2: [10,2], tableM2: [11,2], tableR2: [12,2],
+  shelfJar: [[5,11],[6,11]], shelfJar2: [[5,12],[6,12]],
+  barrel: [[7,0],[0,9],[15,8]], sack: [[0,10],[9,14],[15,7]],
+  ladder: [[0,5],[14,6]], tree: [[4,1],[7,7],[11,13]], chair: [[1,2],[13,13],[2,1]],
+  banner: [[3,0],[12,0],[9,5]], window: [[2,0],[7,5],[13,1]], bookshelf: [[0,0],[0,1],[0,14]],
+};
+const sheets = {};       // id → {img, cols, fw, fh, frames}
+let world = [], round = null, cur = null, talks = 0, budget = 18;
+const SCALE = {};   // 종마다 덩치가 다르다 — 곰은 크고 다람쥐는 작다
+const chat = {};         // id → [{who,text}]
+const board = {};        // id → hour → [{room, kind, by}]
+const topic = {};        // id → {hour, room, person} — 연속 대화 주제
+const discovered = {};   // id → Set — 플레이어가 이미 발견한 "시각|장소" 쌍
+let llmReady = false;
+
+// ── 준비 ────────────────────────────────────────────────────
+async function boot() {
+  const premise = await (await fetch('./premise.json')).json();
+  const castMeta = await (await fetch('./cast.json')).json();
+  castMeta.forEach(c => { SCALE[c.id] = c.scale || 1; });
+  world = premise.world;
+  const h = await fetch('/api/health').then(r => r.json()).catch(() => ({ sam: 'missing' }));
+  llmReady = h.sam === 'ready' || h.sam === 'bridge';
+  $('#pillLLM').textContent = h.sam === 'ready' ? 'SAM · claude-sonnet-4.6' : (h.sam === 'bridge' ? 'SAM · 로그인 다리' : 'SAM 없음 · 간이모드');
+  // 집 타일과 이야기 소품
+  sheet = new Image(); sheet.src = './tilesheet.png'; await sheet.decode().catch(() => {});
+  const smo = await (await fetch('./smo.json')).json();
+  for (const p of PROPS) {
+    const s = smo.find(o => o.key === p.key); if (!s) continue;
+    const c = document.createElement('canvas'); c.width = 16; c.height = 16;
+    const g = c.getContext('2d');
+    s.visual.pixels.forEach((hex, i) => { if (!hex) return; g.fillStyle = hex; g.fillRect(i % 16, Math.floor(i / 16), 1, 1); });
+    const im = new Image(); im.src = c.toDataURL(); await im.decode().catch(() => {});
+    propImgs[p.key] = im;
+  }
+  $('#scene').addEventListener('click', sceneClick);
+  await Promise.all(Object.entries(SPRITE).map(async ([id, ko]) => {
+    const meta = await (await fetch(`./sprites/${ko}-idle-sheet.json`)).json();
+    const img = new Image(); img.src = `./sprites/${ko}-idle-sheet.png`;
+    await img.decode().catch(() => {});
+    sheets[id] = { img, cols: meta.columns, fw: meta.frameWidth, fh: meta.frameHeight, n: meta.totalFrames };
+  }));
+  newRound();
+  tick();
+}
+
+function newRound() {
+  round = makeRound((Math.random() * 2147483000) | 0);
+  talks = 0; cur = null;
+  CAST.forEach(c => { chat[c.id] = []; board[c.id] = {}; topic[c.id] = {}; });
+  Object.keys(discovered).forEach(k => delete discovered[k]);
+  renderRoster(); renderBoard(); renderLog();
+  const me = knowledgeOf(round, 'player');
+  $('#myrole').innerHTML = me.isCulprit
+    ? '<b>너다.</b> 어젯밤 케이크를 먹은 건 너다. 아침까지 들키지 마라.<br><span class="note">네 방패: “' + me.shield.line + '”</span>'
+    : '넌 안 먹었다. <b>진짜 먹은 하나</b>를 찾아라.<br><span class="note">네 방패: “' + me.shield.line + '”</span>';
+  say(null, '아침이다. 냉장고 앞에 빈 접시만 덩그러니 놓여 있다. 어젯밤 집 안에는 여섯뿐이었다.');
+}
+
+// ── 그리기 ──────────────────────────────────────────────────
+function spriteStyle(id, size, frame) {
+  const s = sheets[id]; if (!s) return '';
+  const k = size / s.fw;
+  const col = frame % s.cols, row = Math.floor(frame / s.cols);
+  return `width:${size}px;height:${size}px;background-image:url(${s.img.src});` +
+    `background-size:${s.img.width * k}px ${s.img.height * k}px;` +
+    `background-position:${-col * size}px ${-row * size}px`;
+}
+let frame = 0, lastTick = performance.now();
+function tick(now = performance.now()) {
+  frame = (frame + 1) % 15;
+  const dt = (now - lastTick) / 16.667; lastTick = now;
+  updatePlayer(dt);
+  updateNPCs(dt);
+  document.querySelectorAll('[data-thumb]').forEach(cv => {
+    const id = cv.dataset.thumb, sh = sheets[id]; if (!sh) return;
+    const g = cv.getContext('2d'); g.imageSmoothingEnabled = false;
+    g.clearRect(0, 0, cv.width, cv.height);
+    const f = frame % sh.n, sc = SCALE[id] || 1, S = Math.round(64 * sc);
+    const bx = (cv.width - S) / 2, by = cv.height - S;
+    g.drawImage(sh.img, (f % sh.cols) * sh.fw, Math.floor(f / sh.cols) * sh.fh, sh.fw, sh.fh, bx, by, S, S);
+    drawSpecies(g, id, bx, by, S, S);
+  });
+  drawScene();
+  requestAnimationFrame(tick);
+}
+
+
+// ── 종 표식 — 귀·코·부리·꼬리를 직접 그린다 (에셋에 동물 부품이 없다) ──
+const SKIN = {
+  sgn_kyle:   { fur: '#FFB35C', dark: '#E07A2A', light: '#FFE6C4', line: '#4A2E18' }, // 호랑이
+  sgn_dorn:   { fur: '#C98A55', dark: '#8A5A32', light: '#F4CFA6', line: '#4A2E18' }, // 원숭이
+  sgn_howell: { fur: '#FFC2CE', dark: '#E38AA0', light: '#FFE1E8', line: '#5A3340' }, // 돼지
+  sgn_ben:    { fur: '#FFE066', dark: '#F2A93B', light: '#FFF3BF', line: '#5A4418' }, // 오리
+};
+function blob(cx, path, fill, line, w) { cx.beginPath(); path(cx); cx.fillStyle = fill; cx.fill(); cx.strokeStyle = line; cx.lineWidth = w || 2; cx.stroke(); }
+function drawSpecies(cx, id, x, y, w, h) {
+  const c = SKIN[id]; if (!c) return;                        // 토끼는 SPUM 후드 그대로 둔다
+  // 스프라이트 안에서 캐릭터는 가운데에만 있다. 머리 한가운데를 기준으로 잡는다.
+  const mx = x + w * 0.50, headY = y + h * 0.40, hw = w * 0.085;
+  const hipY = y + h * 0.60, hipX = mx - w * 0.11;
+  const lw = Math.max(1.5, w * 0.022);
+  cx.lineJoin = 'round'; cx.lineCap = 'round';
+
+  if (id === 'sgn_kyle') {                                   // 호랑이 — 삼각 귀 · 이마 줄무늬 · 굵은 줄무늬 꼬리
+    [-1, 1].forEach(function (d) {
+      blob(cx, function (k) {
+        k.moveTo(mx + d * hw * 0.55, headY - h * 0.055);
+        k.lineTo(mx + d * hw * 1.35, headY - h * 0.115);
+        k.lineTo(mx + d * hw * 1.15, headY - h * 0.030);
+        k.closePath();
+      }, c.fur, c.line, lw);
+    });
+    cx.strokeStyle = c.line; cx.lineWidth = lw;
+    [-0.7, 0, 0.7].forEach(function (o) {
+      cx.beginPath();
+      cx.moveTo(mx + hw * o, headY - h * 0.045);
+      cx.lineTo(mx + hw * o * 1.2, headY - h * 0.018);
+      cx.stroke();
+    });
+    blob(cx, function (k) {                                   // 굵고 둥근 꼬리 — 몸에 붙인다
+      k.moveTo(hipX, hipY);
+      k.quadraticCurveTo(hipX - w * 0.10, hipY - h * 0.04, hipX - w * 0.08, hipY - h * 0.09);
+      k.quadraticCurveTo(hipX - w * 0.03, hipY - h * 0.04, hipX + w * 0.01, hipY + h * 0.005);
+      k.closePath();
+    }, c.fur, c.line, lw);
+    cx.strokeStyle = c.line; cx.lineWidth = lw * 1.1;
+    [0.02, 0.045].forEach(function (t) {
+      cx.beginPath();
+      cx.moveTo(hipX - w * (0.05 + t), hipY - h * 0.065);
+      cx.lineTo(hipX - w * (0.07 + t), hipY - h * 0.03);
+      cx.stroke();
+    });
+  }
+
+  if (id === 'sgn_dorn') {                                   // 원숭이 — 크고 둥근 옆 귀 · 길게 감긴 꼬리
+    [-1, 1].forEach(function (d) {
+      blob(cx, function (k) { k.arc(mx + d * hw * 1.35, headY - h * 0.02, w * 0.045, 0, 7); }, c.fur, c.line, lw);
+      blob(cx, function (k) { k.arc(mx + d * hw * 1.35, headY - h * 0.02, w * 0.022, 0, 7); }, c.light, c.light, 1);
+    });
+    cx.strokeStyle = c.line; cx.lineWidth = lw * 2.2;
+    cx.beginPath();
+    cx.moveTo(hipX + w * 0.01, hipY - h * 0.01);
+    cx.bezierCurveTo(hipX - w * 0.10, hipY + h * 0.02, hipX - w * 0.12, hipY - h * 0.07, hipX - w * 0.06, hipY - h * 0.07);
+    cx.stroke();
+    cx.strokeStyle = c.fur; cx.lineWidth = lw * 1.2; cx.stroke();
+  }
+
+  if (id === 'sgn_howell') {                                 // 돼지 — 접힌 귀 · 들창코 · 돌돌 말린 꼬리
+    [-1, 1].forEach(function (d) {
+      blob(cx, function (k) {
+        k.moveTo(mx + d * hw * 0.6, headY - h * 0.055);
+        k.lineTo(mx + d * hw * 1.5, headY - h * 0.085);
+        k.lineTo(mx + d * hw * 1.25, headY - h * 0.015);
+        k.closePath();
+      }, c.fur, c.line, lw);
+    });
+    blob(cx, function (k) { k.ellipse(mx, headY + h * 0.012, w * 0.045, w * 0.032, 0, 0, 7); }, c.dark, c.line, lw);
+    cx.fillStyle = c.line;
+    [-1, 1].forEach(function (d) {
+      cx.beginPath(); cx.ellipse(mx + d * w * 0.016, headY + h * 0.012, w * 0.008, w * 0.012, 0, 0, 7); cx.fill();
+    });
+    cx.strokeStyle = c.line; cx.lineWidth = lw * 1.8;
+    cx.beginPath(); cx.arc(hipX - w * 0.035, hipY - h * 0.01, w * 0.035, 0.5, 5.1); cx.stroke();
+    cx.strokeStyle = c.fur; cx.lineWidth = lw; cx.stroke();
+  }
+
+  if (id === 'sgn_ben') {                                    // 오리 — 넓적 부리 · 머리깃 · 짧은 꽁지
+    blob(cx, function (k) {
+      k.moveTo(mx - w * 0.055, headY + h * 0.005);
+      k.quadraticCurveTo(mx, headY + h * 0.055, mx + w * 0.055, headY + h * 0.005);
+      k.quadraticCurveTo(mx, headY - h * 0.012, mx - w * 0.055, headY + h * 0.005);
+      k.closePath();
+    }, c.dark, c.line, lw);
+    blob(cx, function (k) {
+      k.moveTo(mx - w * 0.02, headY - h * 0.055);
+      k.quadraticCurveTo(mx + w * 0.03, headY - h * 0.115, mx + w * 0.05, headY - h * 0.045);
+      k.closePath();
+    }, c.fur, c.line, lw);
+    blob(cx, function (k) {
+      k.moveTo(hipX + w * 0.01, hipY - h * 0.01);
+      k.lineTo(hipX - w * 0.06, hipY - h * 0.04);
+      k.lineTo(hipX - w * 0.02, hipY + h * 0.02);
+      k.closePath();
+    }, c.fur, c.line, lw);
+  }
+}
+
+// ── 집 그리기 ───────────────────────────────────────────────
+const TS = 24, MW = HW, MH = HH;      // 화면 한 칸 24px
+let sheet = null, propImgs = {}, blocked = null, bubbles = {};
+// ── 이동 시스템 ──────────────────────────────────────────────
+const playerGrid = { ...SPOT.player };
+const playerPx   = { x: SPOT.player.x * TS, y: SPOT.player.y * TS };
+const npcPx = {}; CAST.filter(c => !c.isPlayer).forEach(c => { npcPx[c.id] = { ...SPOT[c.id] }; });
+let playerQueue = [], playerMoving = false, playerPath = [], playerStep = 0;
+let moveTimer = 0; const MOVE_SPEED = 0.14;
+
+function isWalkable(x, y) {
+  if (x < 0 || y < 0 || x >= MW || y >= MH) return false;
+  if (!blocked) blocked = buildBlocked();
+  return !blocked[y * MW + x];
+}
+
+function findPath(sx, sy, ex, ey) {
+  if (sx === ex && sy === ey) return [];
+  if (!isWalkable(ex, ey)) return null;
+  const W2 = MW, H2 = MH, key = (x, y) => y * W2 + x;
+  const open = [], closed = new Set();
+  const h = (x, y) => Math.abs(x - ex) + Math.abs(y - ey);
+  open.push({ x: sx, y: sy, g: 0, f: h(sx, sy), prev: null });
+  const dirs = [[0, -1], [0, 1], [-1, 0], [1, 0]];
+  while (open.length) {
+    open.sort((a, b) => a.f - b.f);
+    const cur = open.shift();
+    const k = key(cur.x, cur.y);
+    if (cur.x === ex && cur.y === ey) {
+      const path = []; let n = cur;
+      while (n) { path.unshift({ x: n.x, y: n.y }); n = n.prev; }
+      return path.slice(1);
+    }
+    closed.add(k);
+    for (const [dx, dy] of dirs) {
+      const nx = cur.x + dx, ny = cur.y + dy;
+      if (!isWalkable(nx, ny) || closed.has(key(nx, ny))) continue;
+      const g = cur.g + 1;
+      const ex2 = open.find(n => n.x === nx && n.y === ny);
+      if (ex2) { if (g < ex2.g) { ex2.g = g; ex2.f = g + h(nx, ny); ex2.prev = cur; } }
+      else open.push({ x: nx, y: ny, g, f: g + h(nx, ny), prev: cur });
+    }
+  }
+  return null;
+}
+
+function startPlayerMove(path) {
+  if (!path || !path.length || playerMoving) return;
+  playerPath = path; playerStep = 0; playerMoving = true;
+}
+
+function updatePlayer(dt) {
+  if (!playerMoving) return;
+  moveTimer += dt * MOVE_SPEED;
+  if (moveTimer >= 1) {
+    moveTimer = 0;
+    const next = playerPath[playerStep];
+    if (next) {
+      playerGrid.x = next.x; playerGrid.y = next.y;
+      playerPx.x = next.x * TS; playerPx.y = next.y * TS;
+      const room = roomOf(next.x, next.y);
+      if (room) SPOT.player.room = room;
+      playerStep++;
+      if (playerStep >= playerPath.length) { playerMoving = false; playerPath = []; return; }
+    }
+  }
+  const target = playerPath[playerStep];
+  if (target) {
+    const t = moveTimer;
+    playerPx.x = ((playerStep > 0 ? playerPath[playerStep-1].x : playerGrid.x) * (1-t) + target.x * t) * TS;
+    playerPx.y = ((playerStep > 0 ? playerPath[playerStep-1].y : playerGrid.y) * (1-t) + target.y * t) * TS;
+  }
+}
+
+window.addEventListener('keydown', e => {
+  if (document.activeElement?.tagName === 'INPUT') return;
+  const dir = { ArrowUp: [0,-1], ArrowDown: [0,1], ArrowLeft: [-1,0], ArrowRight: [1,0],
+                w: [0,-1], s: [0,1], a: [-1,0], d: [1,0],
+                W: [0,-1], S: [0,1], A: [-1,0], D: [1,0] }[e.key];
+  if (dir && !playerMoving) {
+    e.preventDefault();
+    const nx = playerGrid.x + dir[0], ny = playerGrid.y + dir[1];
+    if (isWalkable(nx, ny)) startPlayerMove([{ x: nx, y: ny }]);
+  }
+  if (e.key === 'm' || e.key === 'M') {
+    if (playerPath.length && playerStep < playerPath.length) {
+      const dest = playerPath[playerPath.length - 1];
+      playerPath = []; playerStep = 0; playerMoving = false;
+      startPlayerMove(findPath(playerGrid.x, playerGrid.y, dest.x, dest.y));
+    }
+  }
+});
+
+// ── NPC 자율 이동 ────────────────────────────────────────────
+const npcState = {}; CAST.filter(c => !c.isPlayer).forEach(c => {
+  npcState[c.id] = { gx: SPOT[c.id].x, gy: SPOT[c.id].y, px: SPOT[c.id].x * TS, py: SPOT[c.id].y * TS,
+    tx: null, ty: null, path: [], step: 0, moving: false, timer: Math.random() * 120 + 30 };
+});
+const NPC_SPEED = 0.12;
+
+function npcWander(id) {
+  const s = npcState[id]; if (s.moving) return;
+  s.timer--;
+  if (s.timer > 0) return;
+  s.timer = Math.random() * 90 + 60;
+  const dirs = [[0,-1],[0,1],[-1,0],[1,0]];
+  const candidates = dirs.map(d => ({ x: s.gx + d[0], y: s.gy + d[1] }))
+    .filter(p => isWalkable(p.x, p.y));
+  if (!candidates.length) return;
+  const pick2 = candidates[Math.floor(Math.random() * candidates.length)];
+  s.tx = pick2.x; s.ty = pick2.y; s.path = [{ x: pick2.x, y: pick2.y }]; s.step = 0; s.moving = true;
+}
+
+function updateNPCs(dt) {
+  for (const c of CAST) {
+    if (c.isPlayer) continue;
+    const s = npcState[c.id];
+    npcWander(c.id);
+    if (!s.moving) continue;
+    s.px += ((s.path[s.step].x * TS) - s.px) * NPC_SPEED;
+    s.py += ((s.path[s.step].y * TS) - s.py) * NPC_SPEED;
+    if (Math.abs(s.px - s.path[s.step].x * TS) < 1 && Math.abs(s.py - s.path[s.step].y * TS) < 1) {
+      s.gx = s.path[s.step].x; s.gy = s.path[s.step].y;
+      s.px = s.gx * TS; s.py = s.gy * TS;
+      s.step++;
+      if (s.step >= s.path.length) {
+        s.moving = false; s.tx = null; s.ty = null; s.path = []; s.step = 0;
+        const room = roomOf(s.gx, s.gy);
+        if (room) SPOT[c.id].room = room;
+      }
+    }
+  }
+}
+
+const pick = (arr, x, y) => arr[(x * 7 + y * 13) % arr.length];
+function tileAt(name, x, y) { const v = T[name]; return Array.isArray(v[0]) ? pick(v, x, y) : v; }
+function blit(cx, cell, dx, dy, dw = TS, dh = TS) {
+  if (!sheet) return;
+  const S = sheet.width / 16;
+  cx.drawImage(sheet, cell[0] * S, cell[1] * S, S, S, dx, dy, dw, dh);
+}
+function drawScene() {
+  const cv = $('#scene'); if (!cv || !sheet) return;
+  const cx = cv.getContext('2d'); cx.imageSmoothingEnabled = false;
+  cx.fillStyle = '#241B15'; cx.fillRect(0, 0, cv.width, cv.height);
+  blocked ||= buildBlocked();
+  const inBox = (x, y) => ([x1, y1, x2, y2]) => x >= x1 && x <= x2 && y >= y1 && y <= y2;
+  // 바닥 · 벽 · 뜰 — 도면 글자가 곧 바닥 재료다
+  for (let y = 0; y < MH; y++) for (let x = 0; x < MW; x++) {
+    const dx = x * TS, dy = y * TS;
+    if (isWall(x, y)) {
+      blit(cx, tileAt('wall', x, y), dx, dy);
+      cx.fillStyle = 'rgba(34,20,12,.46)'; cx.fillRect(dx, dy, TS, TS);
+      continue;
+    }
+    const pt = PATCH.find(inBox(x, y));
+    blit(cx, tileAt(pt ? pt[4] : floorOf(x, y), x, y), dx, dy);
+    if (RUGS.some(inBox(x, y)) && roomOf(x, y)) blit(cx, tileAt('rug', x, y), dx, dy);
+    if (roomOf(x, y) === '화원') {                       // 유리 지붕이 한 겹 얹힌다
+      cx.fillStyle = 'rgba(170,214,238,.15)'; cx.fillRect(dx, dy, TS, TS);
+      if (x % 3 === 0) { cx.fillStyle = 'rgba(255,255,255,.16)'; cx.fillRect(dx, dy, 2, TS); }
+    }
+    if (isDoor(x, y)) blit(cx, tileAt('door', x, y), dx, dy);
+  }
+  // 소품 — Y 순서대로 그린다 (3/4 전방향 깊이)
+  const _items = [
+    ...DECOR.map(([k, x, y]) => ({ y, draw() { blit(cx, tileAt(k, x, y), x * TS, y * TS); } })),
+    ...PROPS.map(p => ({ y: p.y, draw() { const im = propImgs[p.key]; if (im) cx.drawImage(im, p.x * TS, p.y * TS, (p.w || 1) * TS, (p.h || 1) * TS); } })),
+  ];
+  _items.sort((a, b) => a.y - b.y);
+  _items.forEach(it => it.draw());
+  // 자리 이름 — 방 다섯 안의 구역까지 보여 준다
+  cx.font = '800 15px "Pretendard",system-ui'; cx.textAlign = 'center';
+  ZONES.forEach(z => {
+    const lx = z.x * TS + TS / 2, ly = z.y * TS + TS / 2;
+    const w = cx.measureText(z.name).width + 20;
+    cx.fillStyle = 'rgba(40,26,18,.55)'; cx.fillRect(lx - w / 2, ly - 13, w, 21);
+    cx.fillStyle = '#FFE9C9'; cx.fillText(z.name, lx, ly + 2);
+  });
+  // 인물
+  CAST.forEach(c => {
+    const s = SPOT[c.id], sh = sheets[c.id]; if (!s) return;
+    const px = c.isPlayer ? playerPx.x : (npcState[c.id]?.px ?? s.x * TS);
+    const py = c.isPlayer ? playerPx.y : (npcState[c.id]?.py ?? s.y * TS);
+    if (c.isPlayer) {                                  // 플레이어는 고양이 자리표시
+      cx.fillStyle = 'rgba(0,0,0,.25)'; cx.beginPath(); cx.ellipse(px + TS / 2, py + TS + 4, 14, 5, 0, 0, 7); cx.fill();
+      cx.fillStyle = '#FFF3E0'; cx.beginPath(); cx.arc(px + TS/2, py + TS - 10, 17, 0, 7); cx.fill();
+      cx.strokeStyle = '#E8894A'; cx.lineWidth = 2.5; cx.stroke();
+      cx.font = '26px serif'; cx.fillText('🐱', px + TS / 2, py + TS - 1);
+      cx.font = '800 12px "Pretendard",system-ui';
+      const nw = cx.measureText('나 (고양이)').width + 12;
+      cx.fillStyle = 'rgba(232,137,74,.92)'; cx.fillRect(px + TS/2 - nw/2, py + TS + 8, nw, 16);
+      cx.fillStyle = '#fff'; cx.fillText('나 (고양이)', px + TS / 2, py + TS + 20);
+      return;
+    }
+    if (!sh) return;
+    const f = frame % sh.n, S = Math.round(96 * (SCALE[c.id] || 1)), cols = sh.cols;
+    cx.fillStyle = 'rgba(0,0,0,.22)'; cx.beginPath(); cx.ellipse(px + TS / 2, py + TS + 2, 16, 6, 0, 0, 7); cx.fill();
+    const bx = px + TS / 2 - S / 2, by = py + TS - S + 8;
+    cx.drawImage(sh.img, (f % cols) * sh.fw, Math.floor(f / cols) * sh.fh, sh.fw, sh.fh, bx, by, S, S);
+    drawSpecies(cx, c.id, bx, by, S, S);
+    if (cur === c.id) { cx.strokeStyle = '#FFB86B'; cx.lineWidth = 2; cx.strokeRect(px - 10, py - 26, TS + 20, TS + 32); }
+    cx.font = '700 11px "Pretendard",system-ui';
+    const w = cx.measureText(c.name).width + 12;
+    cx.fillStyle = 'rgba(40,26,18,.62)'; cx.fillRect(px + TS / 2 - w / 2, py + TS + 4, w, 15);
+    cx.fillStyle = '#FFE9C9'; cx.fillText(c.name, px + TS / 2, py + TS + 15);
+    // 말풍선
+    const bub = bubbles[c.id];
+    if (bub && Date.now() - bub.at < 9000) {
+      const lines = bub.text.replace(/\n+/g, ' ').match(/.{1,16}/g)?.slice(0, 3) || [];
+      const bw = Math.max(...lines.map(l => cx.measureText(l).width)) + 18, bh = lines.length * 15 + 12;
+      const bx = px + TS / 2 - bw / 2, by = py + TS - 104 - bh;
+      cx.fillStyle = 'rgba(255,253,248,.96)'; cx.strokeStyle = '#E7D3B8'; cx.lineWidth = 1.5;
+      cx.beginPath(); cx.roundRect(bx, by, bw, bh, 10); cx.fill(); cx.stroke();
+      cx.fillStyle = '#4A3728'; cx.font = '12px "Pretendard",system-ui';
+      lines.forEach((l, i) => cx.fillText(l, px + TS / 2, by + 18 + i * 15));
+    }
+  });
+  cx.textAlign = 'left';
+}
+function sceneClick(ev) {
+  const cv = $('#scene'), r = cv.getBoundingClientRect();
+  const x = (ev.clientX - r.left) / r.width * cv.width / TS;
+  const y = (ev.clientY - r.top) / r.height * cv.height / TS;
+  let best = null, bd = 3;
+  CAST.filter(c => !c.isPlayer).forEach(c => {
+    const s = SPOT[c.id]; const px2 = s.x + .5, py2 = s.y + .5;
+    const d = Math.hypot(px2 - x, py2 - y);
+    if (d < bd) { bd = d; best = c.id; }
+  });
+  if (best) { cur = best; renderRoster(); renderLog(); }
+}
+function renderRoster() {
+  const r = $('#roster'); r.innerHTML = '';
+  CAST.filter(c => !c.isPlayer).forEach(c => {
+    const d = el('div', 'who' + (cur === c.id ? ' on' : ''));
+    const sp = el('canvas', 'sp'); sp.width = 72; sp.height = 72; sp.dataset.thumb = c.id;
+    sp.style.width = '72px'; sp.style.height = '72px'; sp.style.flex = '0 0 72px';
+    const t = el('div'); t.append(el('b', null, c.name), el('span', null, c.species));
+    d.append(sp, t);
+    d.onclick = () => { cur = c.id; renderRoster(); renderLog(); };
+    r.append(d);
+  });
+}
+function renderLog() {
+  $('#roomtag').textContent = cur
+    ? `${nameOf(round, cur)} — ${SPOT[cur].room}에서 이야기 중`
+    : '집 안의 누군가를 눌러 말을 건다';
+  const L = $('#log'); L.innerHTML = '';
+  (chat[cur] || chat.__intro || []).forEach(m => {
+    const d = el('div', 'msg ' + (m.who === 'player' ? 'me' : 'npc'));
+    if (m.who !== 'player') d.append(el('b', 'nm', nameOf(round, m.who)));
+    d.append(document.createTextNode(m.text));
+    L.append(d);
+  });
+  L.scrollTop = L.scrollHeight;
+  $('#quick').innerHTML = '';
+  ['어젯밤 어디 있었어?', '그 이후엔?', '거긴 누구 있었어?', '너 혹시 치즈케이크 먹었어?', '그 사람은 뭐 하고 있었어?']
+    .forEach(q => { const b = el('button', null, q); b.onclick = () => { $('#say').value = q; send(); }; $('#quick').append(b); });
+  $('#pillTalk').textContent = `대화 ${talks} / ${budget}`;
+}
+function renderBoard() {
+  const b = $('#board'); b.innerHTML = '';
+  const t = el('table');
+  const hr = el('tr'); hr.append(el('th', null, ''));
+  HOURS.forEach(h => hr.append(el('th', null, h.replace('시', ''))));
+  t.append(hr);
+  CAST.forEach(c => {
+    const tr = el('tr'); tr.append(el('th', null, c.name));
+    HOURS.forEach(h => {
+      const cell = board[c.id]?.[h] || [];
+      const rooms = [...new Set(cell.map(x => x.room))];
+      // 적색 충돌: 플레이어가 이미 발견한 증거가 2개 이상이고, 서로 다른 장소일 때만
+      const discRooms = rooms.filter(r => (discovered[cur] || new Set()).has(h + '|' + r));
+      const isConflict = discRooms.length > 1;
+      const td = el('td', isConflict ? 'conflict' : (cell.some(x => x.kind === 'own') ? 'own' : ''));
+      td.textContent = rooms.map(r => r[0]).join('/');
+      td.title = cell.map(x => `${x.room} — ${x.kind === 'own' ? '본인 진술' : '목격: ' + x.by}`).join('\n');
+      tr.append(td);
+    });
+  });
+  b.append(t);
+}
+function record(aboutId, hour, room, kind, by) {
+  (board[aboutId] ||= {});
+  (board[aboutId][hour] ||= []);
+  if (!board[aboutId][hour].some(x => x.room === room && x.kind === kind)) board[aboutId][hour].push({ room, kind, by });
+  // 플레이어가 발견한 증거 기록
+  if (cur && (by === nameOf(round, cur) || by === 'player' || kind === 'own' && aboutId === 'player')) {
+    (discovered[cur] ||= new Set()).add(hour + '|' + room);
+  }
+  // NPC가 말한 증거도 플레이어가 발견한 것으로 간주
+  if (by && by !== 'player') {
+    (discovered[cur] ||= new Set()).add(hour + '|' + room);
+  }
+  renderBoard();
+}
+function harvest(speaker, text) {
+  // 말에서 시각·장소·인물을 주워 증언판에 올린다
+  const t = topic[speaker] || {};
+  HOURS.forEach(h => {
+    if (!text.includes(h)) return;
+    const seg = text.split(h)[1]?.slice(0, 30) || '';
+    ROOMS.forEach(r => {
+      if (!seg.includes(r) && !text.includes(h + '에 ' + r) && !seg.includes(r)) return;
+      const other = CAST.find(c => c.id !== speaker && seg.includes(c.name));
+      if (other) { record(other.id, h, r, 'seen', nameOf(round, speaker)); record(speaker, h, r, 'own'); }
+      else record(speaker, h, r, 'own');
+      // 주제 갱신
+      t.hour = h; t.room = r;
+    });
+  });
+  topic[speaker] = t;
+}
+function say(who, text) {
+  if (who === null) { (chat.__intro ||= []).push({ who: 'sys', text }); renderLog(); return; }
+  chat[cur].push({ who, text });
+  if (who !== 'player') { bubbles[cur] = { text, at: Date.now() }; harvest(cur, text); }
+  else harvest('player', text);
+  renderLog();
+}
+
+// ── 대사 ────────────────────────────────────────────────────
+async function ask(id, userText) {
+  const intent = classifyIntent(userText);
+  const msgs = buildMessages({ round, id, world, history: chat[id].slice(-8), userText, intent });
+  if (!llmReady) return template(id, userText);
+  try {
+    const r = await fetch('/api/sam/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: MODEL.normal, messages: msgs, temperature: 0.9, max_tokens: 220 }) });
+    const j = await r.json();
+    let text = j.choices?.[0]?.message?.content || j.output?.content || '';
+    text = String(text).trim();
+    const v = violations(round, id, text);
+    if (!v.ok) {  // 승인 안 된 사실이 섞이면 한 번 되돌린다
+      const retry = await fetch('/api/sam/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: MODEL.normal, temperature: 0.6, max_tokens: 200,
+          messages: [...msgs, { role: 'assistant', content: text },
+            { role: 'user', content: '지금 말한 것 중에 네가 실제로 아는 게 아닌 시각·장소·사람이 섞였다. 아는 것만으로 다시 한 문장 말해라.' }] }) });
+      const j2 = await retry.json();
+      text = (j2.choices?.[0]?.message?.content || text).trim();
+    }
+    return text || template(id, userText);
+  } catch { return template(id, userText); }
+}
+function template(id, q) {
+  const k = knowledgeOf(round, id);
+  if (/먹었|케이크/.test(q)) return `아니. 안 먹었어. ${k.shield.line}.`;
+  if (/어디/.test(q)) return `${k.own[0].hour}엔 ${k.own[0].room}, ${k.own[1].hour}엔 ${k.own[1].room}에 있었어.`;
+  if (/이후|그 뒤/.test(q)) return `그 뒤엔 ${k.own[2].room}.`;
+  if (/누구|봤/.test(q)) return k.seen.length ? `${k.seen[0].hour}에 ${k.seen[0].room}에서 ${nameOf(round, k.seen[0].who)}를 봤어.` : '아무도 못 봤는데.';
+  return '음… 그건 잘 모르겠어.';
+}
+async function send() {
+  const v = $('#say').value.trim();
+  if (!v || !cur || talks >= budget) return;
+  $('#say').value = ''; say('player', v);
+  talks++; renderLog();
+  const btn = $('#send'); btn.disabled = true; btn.textContent = '…';
+  const a = await ask(cur, v);
+  say(cur, a);
+  btn.disabled = false; btn.textContent = '말한다';
+}
+$('#send').onclick = send;
+$('#say').addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+$('#btnNew').onclick = () => { if (confirm('새 판을 시작할까?')) newRound(); };
+
+// ── 지목 ────────────────────────────────────────────────────
+$('#btnAccuse').onclick = () => {
+  let who = null, hour = null, wit = null;
+  const b = $('#dlgBody');
+  b.innerHTML = '<h2>지목한다</h2><p class="note">먹은 사람 · 그 시각 · 그걸 증명할 목격자를 한꺼번에 맞혀야 한다.</p>';
+  const mk = (label, items, cb) => {
+    b.append(el('p', null, label));
+    const row = el('div', 'sel');
+    items.forEach(it => { const x = el('button', null, it.t); x.onclick = () => { [...row.children].forEach(c => c.classList.remove('on')); x.classList.add('on'); cb(it.v); }; row.append(x); });
+    b.append(row);
+  };
+  mk('먹은 건 누구?', CAST.map(c => ({ t: c.name, v: c.id })), v => who = v);
+  mk('몇 시에?', HOURS.map(h => ({ t: h, v: h })), v => hour = v);
+  mk('그걸 밝혀 줄 목격자는?', CAST.map(c => ({ t: c.name, v: c.id })), v => wit = v);
+  const go = el('button', 'primary', '이걸로 간다'); go.style.marginTop = '12px';
+  go.onclick = () => { $('#dlg').close(); verdict(who, hour, wit); };
+  const no = el('button', null, '더 물어본다'); no.style.marginLeft = '8px';
+  no.onclick = () => $('#dlg').close();
+  b.append(go, no);
+  $('#dlg').showModal();
+};
+function verdict(who, hour, wit) {
+  const okWho = who === round.culprit;
+  const okHour = hour === HOURS[round.theftHour];
+  const win = okWho && okHour;
+  const b = $('#dlgBody');
+  const truth = CAST.map(c => `${c.name}: ` + HOURS.map((h, i) => `${h} ${round.paths[c.id][i]}`).join(' · ')).join('\n');
+  b.innerHTML = '';
+  b.append(el('h2', null, win ? '맞혔다!' : '틀렸다…'));
+  b.append(el('p', null, `먹은 건 ${nameOf(round, round.culprit)}, ${HOURS[round.theftHour]}에 부엌에서였다.` +
+    (round.accomplice ? ` ${nameOf(round, round.accomplice)}이(가) 감싸 주고 있었다.` : ' 아무도 감싸 주지 않았다.')));
+  const pre = el('pre', 'note'); pre.style.whiteSpace = 'pre-wrap'; pre.textContent = truth; b.append(pre);
+  const again = el('button', 'primary', '한 판 더'); again.onclick = () => { $('#dlg').close(); newRound(); };
+  b.append(again);
+  $('#dlg').showModal();
+}
+
+// 그림 다듬을 때 쓰는 창구
+window.__dbg = { sheets, drawSpecies, SCALE };
+boot();
+</script>
+</body>
+</html>
