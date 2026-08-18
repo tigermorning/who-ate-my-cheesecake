@@ -4,3 +4,6 @@
 node_modules/
 .DS_Store
 *.log
+
+# OMC 운영 부스러기
+.omc/
