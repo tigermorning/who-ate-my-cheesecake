@@ -5,13 +5,12 @@
 export const ROOMS = ['부엌', '식당', '거실', '서재', '데크', '운동장', '텃밭', '헛간'];
 export const HOURS = ['21시', '22시', '23시', '00시', '01시', '02시'];
 export const CAST = [
-  { id: 'sgn_deer',     name: '사슴',   species: '사슴' },
-  { id: 'sgn_horse',    name: '적토마', species: '말' },
-  { id: 'sgn_penguin',  name: '펭귄',   species: '펭귄' },
-  { id: 'sgn_rabbit',   name: '토끼',   species: '토끼' },
-  { id: 'sgn_chestnut', name: '밤톨이', species: '곰' },
-  { id: 'sgn_bull',     name: '황소',   species: '황소' },
-  { id: 'player',       name: '나',     species: '고양이', isPlayer: true },
+  { id: 'sgn_haru',  name: '하루',  species: '베이커' },
+  { id: 'sgn_mina',  name: '미나',  species: '시인' },
+  { id: 'sgn_coco',  name: '코코',  species: '정원사' },
+  { id: 'sgn_lulu',  name: '루루',  species: '화가' },
+  { id: 'sgn_peach', name: '피치',  species: '음악가' },
+  { id: 'sgn_ruby',  name: '루비',  species: '요리사' },
 ];
 
 export const SHIELDS = [
@@ -58,12 +57,15 @@ export function witnessesOf(paths, id, h) {
 }
 
 // ── 판 만들기 ────────────────────────────────────────────────
-export function makeRound(seed = Date.now() % 2147483647) {
+// playerId 는 플레이어가 고른 캐릭터다. 그 사람은 범인이 아니다 — 자기가 안 먹은 걸 자기가 안다.
+export function makeRound(seed = Date.now() % 2147483647, playerId = null) {
   const r = rng(seed);
+  const suspects = CAST.filter(c => c.id !== playerId);
+  if (!suspects.length) throw new Error('용의자가 없다');
 
   for (let attempt = 0; attempt < 400; attempt++) {
     const paths = makePaths(r);
-    const culprit = pick(r, CAST).id;
+    const culprit = pick(r, suspects).id;
 
     // 범행: 범인이 부엌에 혼자 있던 시각. 그런 시각이 없으면 동선을 버리는 대신
     // 범인의 한 칸을 부엌으로 옮긴다 — 버리면 「잘 돌아다니는 성격」이 범인으로 더 자주 뽑힌다.
@@ -123,7 +125,7 @@ export function makeRound(seed = Date.now() % 2147483647) {
     // 범인의 알리바이에는 구멍이 있어야 한다 — 범행 시각에 아무도 그를 못 봤다는 것 자체가 구멍이다.
     return {
       seed, paths, culprit, theftHour, theftRoom: '부엌',
-      accomplice, planted, shields, shieldClues,
+      accomplice, planted, shields, shieldClues, playerId,
       cast: CAST, rooms: ROOMS, hours: HOURS,
     };
   }

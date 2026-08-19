@@ -20,8 +20,17 @@
 - [x] Cast 서버 저장 — `saveServerSnapshot('manual')` 성공 (rev 56)
 - [x] `cast.json` 오염 정리 — `好奇心`→`호기심`, `"_social"`→`"사교적"`
 
+- [x] **play.html 렌더링 확인 + 3건 수정** (08-19 14:10)
+      캐릭터가 SPUM 스프라이트로 그려지는 것 확인. 같이 고친 것:
+      맵 배경 복구(`#bg`), 캐릭터 크기(`unitScale`), 이름표 중복 제거, 무대 폭 정리
+- [x] **플레이어를 캐스트 6종 중 하나로** — 「나(고양이)」 삭제. 시작할 때 고르고, 고른 캐릭터는
+      범인에서 빠진다(`makeRound(seed, playerId)`). 플레이어도 SPUM 런타임이 그린다
+
 ## 지금 하는 것
-- [ ] **play.html 에서 SPUM 런타임 캐릭터 렌더링 테스트** — 캐릭터가 스프라이트로 그려지는지
+- [ ] **SPUM 월드 AI 의 SAM 호출 404 고치기** — 런타임이 `/api/sam/v1/generate` 를 부르는데
+      모델 이름이 빈값이라 SAM 이 `Unknown model: ''` 로 404 를 준다. 우리 서버가 그 404 를
+      그대로 흘린다. 실측: `POST /openai/v1/chat/completions` + `claude-haiku-4-5` → 200 정상.
+      → sync 의 `worldAI` 로 모델을 넘기거나, serve.mjs 에서 빈 모델을 기본값으로 채워라
 
 ## 다음 (순서대로)
 - [ ] Step 5: NPC 기억 + 소통 — 사건 기억, 자연스러운 정보 공유
@@ -29,9 +38,18 @@
 - [ ] Step 7: 데모 검증 — 자율이동, 상호작용, 기억, 소통 전부 확인
 
 ## 알려진 문제
+- **SPUM 런타임은 타일맵을 안 그린다.** `sync({grid})` 의 `setGrid()` 는 길찾기 전용이다
+  (모듈 전수 확인 — `TileMap` 자체가 없다). 08-19 13:35 의 "런타임이 맵을 전부 담당" 판단은
+  틀렸고, 그래서 맵이 검게 나왔다. 배경은 `spumMap.bake()` 를 `#bg` 캔버스에 깐다.
+  런타임 씬 배경은 투명(`rgba(0,0,0,0)`)이고 매 프레임 `clearRect` 라 아래가 비친다.
+- **`unitScale` 은 0.035~0.35 로 잘린다** (기본 0.09). `1` 을 넘기면 0.35 로 잘려 캐릭터가
+  타일보다 훨씬 커진다. 24px 타일에는 `0.055` 가 맞다.
 - **serve.mjs 가 자꾸 죽는다** — 에이전트 셸 타임아웃(10초)이 서버 프로세스를 같이 죽였다.
   반드시 백그라운드로 띄울 것. 죽으면 `/api/bridge/pull` 이 `ERR_CONNECTION_REFUSED` 로 뜬다.
 - **8790 포트 선점** — 이전 node 프로세스가 남아 있으면 `EADDRINUSE`. 먼저 정리하고 띄운다.
+  ⚠️ **WSL 쪽과 Windows 쪽 서버가 따로 뜬다.** 브라우저(Windows)는 Windows 서버를 보고,
+  WSL 의 `curl 127.0.0.1:8790` 은 WSL 서버를 본다. 낡은 WSL 서버가 살아 있으면 검증 결과가
+  엇갈린다 — `ss -ltnp | grep 8790` 로 확인하고 죽여라.
 - **Playwright 브라우저가 자꾸 닫힌다 — 캔버스 문제가 아니다** (08-19 확인).
   원인 둘: ① `inject-characters.mjs`/`check-characters.mjs` 가 끝에서 `await context.close()` 를
   부른다 — 설계대로 닫는 것이다. ② node 프로세스가 죽으면 브라우저도 같이 죽는다(에이전트 셸

@@ -162,6 +162,11 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  // ── 안 잡힌 /api/ 요청은 로그로 남긴다 (404 원인 추적용) ───
+  if (url.pathname.startsWith('/api/')) {
+    console.log(`[404] ${req.method} ${url.pathname}`);
+  }
+
   // ── 정적 파일 ─────────────────────────────────────────────
   // 어디서 부르든 읽을 수 있게 열어 둔다. 로그인된 SPUM 탭이 여기서
   // smo.json · house-map.json 을 가져가 Studio 에 올린다.
