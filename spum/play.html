@@ -40,6 +40,8 @@ header.top{display:flex;align-items:center;gap:14px;margin-bottom:14px}
 .msg{max-width:82%;padding:10px 13px;border-radius:16px;white-space:pre-wrap}
 .msg.npc{background:var(--cream);border:1.5px solid var(--line);border-bottom-left-radius:6px;align-self:flex-start}
 .msg.me{background:#FFE3CC;border:1.5px solid #F2C79A;border-bottom-right-radius:6px;align-self:flex-end}
+.msg.sys{background:#FFF3E0;border:1.5px dashed var(--line);color:var(--ink-soft);
+  font-size:12.5px;align-self:center;max-width:94%;text-align:center;border-radius:12px}
 .msg .nm{display:block;font-size:11px;font-weight:800;color:var(--accent);margin-bottom:3px}
 .ask{display:flex;gap:8px;margin-top:10px}
 .ask input{flex:1;padding:12px 14px;border-radius:14px;border:1.5px solid var(--line);background:#fff;font:inherit}
@@ -71,6 +73,7 @@ dialog::backdrop{background:rgba(60,40,25,.45)}
     <div class="chip">
       <span class="pill" id="pillTime">시간 21시</span>
       <span class="pill" id="pillTalk">대화 0</span>
+      <span class="pill" id="pillGossip">소문 0</span>
       <span class="pill" id="pillLLM">…</span>
       <button id="btnNextHour"> 다음 시각 ▶</button>
       <button id="btnNew">새 판</button>
@@ -116,7 +119,8 @@ dialog::backdrop{background:rgba(60,40,25,.45)}
 
 <script type="module">
 import { makeRound, knowledgeOf, nameOf, ROOMS, HOURS, CAST } from './round.mjs';
-import { buildMessages, violations, classifyIntent, MODEL } from './dialogue.mjs';
+import { buildMessages, buildGossipMessages, violations, classifyIntent, topicOf, MODEL } from './dialogue.mjs';
+import { createMemory, gossipOnce, gossipLine, noteAsked, memorySize, heardCount } from './memory.mjs';
 import { W as HW, H as HH, SPOT, ZONES, roomOf } from './house.mjs';
 import { loadSpumMap } from './spummap.mjs';
 
@@ -156,6 +160,49 @@ function drawBackground() {
   g.drawImage(baked, 0, 0, baked.width, baked.height, 0, 0, cv.width, cv.height);
 }
 
+// SPUM 런타임과 얼굴 굽기가 같은 정의를 본다.
+function spumCharacterOf(characterId) {
+  const equip = CHARACTER_EQUIP[characterId];
+  if (!equip) return null;
+  return {
+    id: characterId,
+    name: (CAST.find(c => c.id === characterId) || {}).name || characterId,
+    appearance: { equipment: { ...equip }, colors: { ...(CHARACTER_COLORS[characterId] || {}) }, maskEnabled: true },
+  };
+}
+
+// ── 로스터 얼굴 — SPUM 이 직접 굽는다 ───────────────────────
+// 이모지는 자리표시자였다(🌙·🎵). SPUM 캐릭터 프리뷰로 진짜 얼굴을 뽑는다.
+// 리소스(SPKG)는 월드 런타임이 이미 올려 둔 것을 그대로 쓴다 — ResourceLoader 는 싱글턴이다.
+const avatarCache = {};
+async function buildAvatars() {
+  if (!spumReady) return;
+  let host = null, preview = null;
+  try {
+    const mod = await import('/spum-cdn/packages/spum-character/preview/CharacterPreview.js');
+    host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:-9999px;top:0;width:180px;height:180px';
+    document.body.append(host);
+    preview = mod.createCharacterPreview(host);
+    await preview.mount({});
+    for (const c of CAST) {
+      const tmpl = spumCharacterOf(c.id);
+      if (!tmpl) continue;
+      await preview.updateCharacter(tmpl);
+      await new Promise(r => setTimeout(r, 140));      // 스프라이트가 붙을 틈을 준다
+      const url = preview.captureThumbnail({ size: 128, focus: 'character' });
+      if (url) avatarCache[c.id] = url;
+    }
+    console.log('[SPUM] 얼굴', Object.keys(avatarCache).length, '개를 구웠다');
+  } catch (e) {
+    console.warn('[SPUM] 얼굴 굽기 실패 — 이모지로 간다:', e.message);
+  } finally {
+    try { preview?.destroy(); } catch {}
+    host?.remove();
+    renderRoster();
+  }
+}
+
 // ── SPUM 런타임 ─────────────────────────────────────────────
 let spumRuntime = null, spumReady = false;
 async function initSPUM() {
@@ -189,15 +236,7 @@ function syncSPUM() {
     const gy = isMe ? playerGrid.y : (npcState[c.id]?.gy ?? SPOT[c.id].y);
     return { instanceId: c.id, characterId: c.id, spawnX: gx, spawnY: gy, x: gx, y: gy };
   });
-  const characterLookup = (characterId) => {
-    const equip = CHARACTER_EQUIP[characterId];
-    if (!equip) return null;
-    return {
-      id: characterId,
-      name: (CAST.find(c => c.id === characterId) || {}).name || characterId,
-      appearance: { equipment: { ...equip }, colors: { ...(CHARACTER_COLORS[characterId] || {}) }, maskEnabled: true },
-    };
-  };
+  const characterLookup = spumCharacterOf;
   try {
     spumRuntime.sync({ grid: gridData, cast: castEntries, characterLookup, shouldRun: true, unitScale: UNIT_SCALE });
   } catch (e) {
@@ -209,15 +248,23 @@ function syncSPUM() {
 let spumMap = null, spumObstacle = null;
 let world = [], round = null, cur = null, talks = 0, budget = 18;
 const chat = {}, board = {}, topic = {}, discovered = {};
+// SPUM Cast 의 인격(성격·MBTI·말투·내력). NPC 만 갖는다 —
+// 플레이어가 고른 캐릭터의 인격은 아래 boot() 에서 통째로 지운다.
+const castPersona = {}, castPersonaAll = {};
+// NPC 마다 하나씩. 판이 새로 시작될 때만 갈아 끼운다.
+const memories = {};
+const gossipAt = {}, gossipTurn = {};
+let gossipCount = 0;
 let llmReady = false;
 let currentHourIndex = 0, hourTimer = 0;
 const HOUR_INTERVAL = 2700;
 const ROOM_POS = {}; ZONES.forEach(z => { ROOM_POS[z.name] = { x: z.x, y: z.y }; });
 
 const TS = 24, MW = HW, MH = HH;
-// SPUM 월드 유닛 배율. 런타임 기본값 0.09, 허용 0.035~0.35.
-// 우리 타일은 24px 이라 기본값도 크다 — 한 칸에 들어오게 낮춘다.
-const UNIT_SCALE = 0.055;
+// SPUM 월드 유닛 배율. 런타임 허용 0.035~0.35 (넘기면 잘린다).
+// 0.055 는 한 칸에 딱 맞지만 너무 작아 얼굴이 안 보였다.
+// 0.12 면 세로 두 칸쯤 — 방 안에서 캐릭터가 또렷하게 읽힌다.
+const UNIT_SCALE = 0.12;
 let bubbles = {};
 
 // 플레이어는 캐스트 6종 가운데 하나다. 고양이는 없앴다.
@@ -335,7 +382,6 @@ function advanceHour() {
     const targetRoom = round.paths[c.id][currentHourIndex];
     if (targetRoom) sendNPCtoRoom(c.id, targetRoom);
   });
-  npcShareInfo();
   renderTimeDisplay();
 }
 function updateNPCs(dt) {
@@ -386,21 +432,73 @@ function updateProximity() {
   });
   if (nearestNPC && !cur) { cur = nearestNPC; renderRoster(); renderLog(); }
 }
-let lastShareHour = -1;
-function npcShareInfo() {
-  if (!round || currentHourIndex === lastShareHour) return;
-  lastShareHour = currentHourIndex;
-  const npcList = NPCS();
-  for (let i = 0; i < npcList.length; i++) {
-    for (let j = i + 1; j < npcList.length; j++) {
-      const a = npcList[i], b = npcList[j];
-      const roomA = roomOf(npcState[a.id].gx, npcState[a.id].gy);
-      const roomB = roomOf(npcState[b.id].gx, npcState[b.id].gy);
-      if (roomA && roomA === roomB) {
-        const hour = HOURS[currentHourIndex];
-        record(a.id, hour, roomA, 'seen', nameOf(round, b.id));
-        record(b.id, hour, roomB, 'seen', nameOf(round, a.id));
-      }
+// ── 입소문 ──────────────────────────────────────────────────
+// 같은 자리에 오래 서 있으면 한 조각씩 주고받는다. 받은 쪽은 출처를 달아 기억한다.
+// 플레이어의 증언판에는 자동으로 오르지 않는다 — 가까이 있어서 엿들어야 올라간다.
+const GOSSIP_RANGE = 2.5;      // 이 안에 들어와야 말을 섞는다
+const GOSSIP_COOLDOWN = 4200;  // 같은 짝은 이 간격으로만
+const EARSHOT = 5;             // 플레이어가 이 안에 있으면 엿듣는다
+
+function sysLine(text) {
+  const bucket = cur ? (chat[cur] ||= []) : (chat.__intro ||= []);
+  bucket.push({ who: 'sys', text });
+  renderLog();
+}
+
+function overhear(fromId, toId, g, line) {
+  const e = g.entry;
+  if (e.k === 'place' && e.who && e.who !== '__player') record(e.who, e.hour, e.room, 'heard', nameOf(round, fromId));
+  sysLine('(엿들었다) ' + nameOf(round, fromId) + ' → ' + nameOf(round, toId) + ': ' + line);
+}
+
+let gossipInFlight = 0;
+// 사실은 memory.mjs 가 고르고, 문장은 SAM 이 짓는다. SAM 이 없거나 밀리면 기본 문장을 쓴다.
+async function phraseGossip(speakerId, listenerId, g, fallback) {
+  if (!llmReady || gossipInFlight >= 2) return fallback;
+  gossipInFlight++;
+  try {
+    const msgs = buildGossipMessages({ round, speakerId, listenerId,
+      persona: castPersona[speakerId], fact: fallback, kind: (g.src || g.entry).k });
+    const r = await fetch('/api/sam/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: MODEL.fast, messages: msgs, temperature: 1, max_tokens: 90 }) });
+    const j = await r.json();
+    const t = String(j.choices?.[0]?.message?.content || '').trim();
+    if (!t) return fallback;
+    // 지어낸 시각·장소·사람이 섞이면 버리고 기본 문장으로 돌아간다
+    return violations(round, speakerId, t, memories[speakerId]).ok ? t : fallback;
+  } catch { return fallback; }
+  finally { gossipInFlight--; }
+}
+
+function updateGossip() {
+  if (!round) return;
+  const now = Date.now();
+  const list = NPCS();
+  for (let i = 0; i < list.length; i++) {
+    for (let j = i + 1; j < list.length; j++) {
+      const a = list[i], b = list[j];
+      const sa = npcState[a.id], sb = npcState[b.id];
+      if (!sa || !sb) continue;
+      if (Math.hypot(sa.gx - sb.gx, sa.gy - sb.gy) > GOSSIP_RANGE) continue;
+      const pair = a.id + '|' + b.id;
+      if (now - (gossipAt[pair] || 0) < GOSSIP_COOLDOWN) continue;
+      gossipAt[pair] = now;
+      // 번갈아 말한다 — 한쪽만 떠드는 그림이 되지 않게
+      gossipTurn[pair] = (gossipTurn[pair] || 0) + 1;
+      const speaker = gossipTurn[pair] % 2 ? a : b, listener = gossipTurn[pair] % 2 ? b : a;
+      const g = gossipOnce(round, memories[speaker.id], memories[listener.id]);
+      if (!g) continue;
+      gossipCount++;
+      const base = gossipLine(round, g);
+      const ss = npcState[speaker.id];
+      const inEarshot = Math.hypot(ss.gx - playerGrid.x, ss.gy - playerGrid.y) <= EARSHOT;
+      bubbles[speaker.id] = { text: base, at: Date.now() };
+      phraseGossip(speaker.id, listener.id, g, base).then(line => {
+        bubbles[speaker.id] = { text: line, at: Date.now() };
+        if (inEarshot) overhear(speaker.id, listener.id, g, line);
+      });
+      renderRoster();
+      const pg = $('#pillGossip'); if (pg) pg.textContent = '소문 ' + gossipCount;
     }
   }
 }
@@ -418,7 +516,7 @@ let frame = 0, lastTick = performance.now();
 function tick(now = performance.now()) {
   frame = (frame + 1) % 15;
   const dt = (now - lastTick) / 16.667; lastTick = now;
-  updatePlayer(dt); updateNPCs(dt); updateProximity();
+  updatePlayer(dt); updateNPCs(dt); updateProximity(); updateGossip();
   proximityPulse = (proximityPulse + dt * 0.05) % (Math.PI * 2);
   // SPUM 런타임이 #scene을 자체 rAF로 관리. 위치만 동기화.
   if (spumReady) syncSPUM();
@@ -499,12 +597,19 @@ function renderRoster() {
   NPCS().forEach(c => {
     const isNear = nearestNPC === c.id;
     const d = el('div', 'who' + (cur === c.id ? ' on' : '') + (isNear ? ' near' : ''));
-    const emoji = CHARACTER_EMOJI[c.id] || '👤';
     const colors = CHARACTER_COLORS[c.id] || {};
     const avatar = el('div', 'avatar');
     avatar.style.background = colors.body || '#ddd';
-    avatar.textContent = emoji;
-    const t = el('div'); t.append(el('b', null, c.name), el('span', null, c.species + (isNear ? ' · 근처' : '')));
+    if (avatarCache[c.id]) {
+      const img = document.createElement('img');
+      img.src = avatarCache[c.id];
+      img.alt = c.name;
+      img.style.cssText = 'width:100%;height:100%;object-fit:contain;image-rendering:pixelated';
+      avatar.append(img);
+    } else avatar.textContent = CHARACTER_EMOJI[c.id] || '👤';   // SPUM 이 아직 안 구웠을 때만
+    const heard = heardCount(memories[c.id]);
+    const t = el('div'); t.append(el('b', null, c.name), el('span', null, c.species + (isNear ? ' · 근처' : '')
+      + ' · 기억 ' + memorySize(memories[c.id]) + (heard ? ' (들은 ' + heard + ')' : '')));
     d.append(avatar, t);
     d.onclick = () => { cur = c.id; renderRoster(); renderLog(); };
     r.append(d);
@@ -515,8 +620,9 @@ function renderLog() {
   $('#roomtag').textContent = cur ? `${nameOf(round, cur)} — ${SPOT[cur].room}에서 이야기 중` : '집 안의 누군가를 눌러 말을 건다';
   const L = $('#log'); L.innerHTML = '';
   (chat[cur] || chat.__intro || []).forEach(m => {
-    const d = el('div', 'msg ' + (m.who === 'player' ? 'me' : 'npc'));
-    if (m.who !== 'player') d.append(el('b', 'nm', nameOf(round, m.who)));
+    const cls = m.who === 'player' ? 'me' : (m.who === 'sys' ? 'sys' : 'npc');
+    const d = el('div', 'msg ' + cls);
+    if (cls === 'npc') d.append(el('b', 'nm', nameOf(round, m.who)));
     d.append(document.createTextNode(m.text)); L.append(d);
   });
   L.scrollTop = L.scrollHeight;
@@ -543,6 +649,7 @@ function renderBoard() {
       td.title = cell.map(x => `${x.room} — ${x.kind === 'own' ? '본인 진술' : '목격: ' + x.by}`).join('\n');
       tr.append(td);
     });
+    t.append(tr);
   });
   b.append(t);
 }
@@ -579,7 +686,10 @@ function say(who, text) {
 // ── 대사 ────────────────────────────────────────────────────
 async function ask(id, userText) {
   const intent = classifyIntent(userText);
-  const msgs = buildMessages({ round, id, world, history: chat[id].slice(-8), userText, intent });
+  const mem = memories[id];
+  // 물어본 것 자체가 기억에 남는다 — 나중에 다른 방에서 이 이야기가 돈다.
+  noteAsked(round, mem, topicOf(intent, userText));
+  const msgs = buildMessages({ round, id, world, history: chat[id].slice(-8), userText, intent, mem, persona: castPersona[id] });
   if (!llmReady) return template(id, userText);
   try {
     const r = await fetch('/api/sam/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -587,7 +697,7 @@ async function ask(id, userText) {
     const j = await r.json();
     let text = j.choices?.[0]?.message?.content || j.output?.content || '';
     text = String(text).trim();
-    const v = violations(round, id, text);
+    const v = violations(round, id, text, mem);
     if (!v.ok) {
       const retry = await fetch('/api/sam/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model: MODEL.normal, temperature: 0.6, max_tokens: 200,
@@ -619,7 +729,10 @@ async function send() {
 }
 $('#send').onclick = send;
 $('#say').addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
-$('#btnNew').onclick = () => { if (confirm('새 판을 시작할까?')) newRound(); };
+$('#btnNew').onclick = async () => {
+  if (!confirm('새 판을 시작할까? 캐릭터부터 다시 고른다.')) return;
+  await pickPlayer(); seatCast(); newRound();
+};
 $('#btnNextHour').addEventListener('click', () => { advanceHour(); });
 
 // ── 지목 ────────────────────────────────────────────────────
@@ -678,12 +791,24 @@ function chooseCharacter() {
   });
 }
 
+// 고를 때마다 인격표를 다시 만든다. 플레이어가 고른 캐릭터는 빼고 채운다 —
+// 그래야 성격·MBTI 가 SAM 프롬프트에 실릴 길 자체가 없다.
+async function pickPlayer() {
+  PLAYER_ID = await chooseCharacter();
+  Object.keys(castPersona).forEach(k => delete castPersona[k]);
+  Object.entries(castPersonaAll).forEach(([id, p]) => { if (id !== PLAYER_ID) castPersona[id] = p; });
+  return PLAYER_ID;
+}
+
 // ── 게임 시작 ──────────────────────────────────────────────
 function newRound() {
   round = makeRound((Math.random() * 2147483000) | 0, PLAYER_ID);
   seatCast();
   talks = 0; cur = null; currentHourIndex = 0; hourTimer = 0;
-  CAST.forEach(c => { chat[c.id] = []; board[c.id] = {}; topic[c.id] = {}; });
+  CAST.forEach(c => { chat[c.id] = []; board[c.id] = {}; topic[c.id] = {}; memories[c.id] = createMemory(round, c.id); });
+  Object.keys(gossipAt).forEach(k => delete gossipAt[k]);
+  Object.keys(gossipTurn).forEach(k => delete gossipTurn[k]);
+  gossipCount = 0; $('#pillGossip').textContent = '소문 0';
   Object.keys(discovered).forEach(k => delete discovered[k]);
   NPCS().forEach(c => {
     const room = round.paths[c.id][0];
@@ -696,20 +821,26 @@ function newRound() {
   const me = knowledgeOf(round, PLAYER_ID);
   const meName = (CAST.find(c => c.id === PLAYER_ID) || {}).name || '나';
   $('#myrole').innerHTML = '넌 <b>' + meName + '</b>다. 넌 안 먹었다. <b>진짜 먹은 하나</b>를 찾아라.'
-    + '<br><span class="note">네 방패: "' + me.shield.line + '"</span>';
+    + '<br><span class="note">네 방패: "' + me.shield.line + '"</span>'
+    + '<br><span class="note">네 성격·MBTI 는 판에서 빠진다 — 말은 네가 한다.</span>';
   say(null, '아침이다. 냉장고 앞에 빈 접시만 덩그러니 놓여 있다. 어젯밤 집 안에는 여섯뿐이었다.');
 }
 
 async function boot() {
   const premise = await (await fetch('./premise.json')).json();
   world = premise.world;
+  // SPUM Cast 정본에서 인격을 읽는다
+  // 인격을 못 읽어도 캐릭터 고르기까지 막지는 않는다 (인격 없이도 판은 돈다)
+  try {
+    (await (await fetch('./cast.json')).json()).forEach(c => { castPersonaAll[c.id] = c.persona || null; });
+  } catch (e) { console.warn('[cast] 인격을 못 읽었다:', e.message); }
   const h = await fetch('/api/health').then(r => r.json()).catch(() => ({ sam: 'missing' }));
   llmReady = h.sam === 'ready' || h.sam === 'bridge';
   $('#pillLLM').textContent = h.sam === 'ready' ? 'SAM · claude-sonnet-4.6' : (h.sam === 'bridge' ? 'SAM · 로그인 다리' : 'SAM 없음 · 간이모드');
   spumMap = await loadSpumMap('./');
   spumObstacle = new Uint8Array(spumMap.obstacle);
   drawBackground();
-  PLAYER_ID = await chooseCharacter();
+  await pickPlayer();
   seatCast();
   await initSPUM();
   if (spumReady) {
@@ -718,11 +849,20 @@ async function boot() {
     // 첫 sync — 맵+캐릭터 데이터 전달. 런타임이 자체 rAF로 렌더링 시작.
     syncSPUM();
     console.log('[SPUM] First sync done. Runtime manages #scene rendering.');
+    buildAvatars();   // 기다리지 않는다 — 다 구워지면 로스터가 알아서 바뀐다
   }
   $('#scene').addEventListener('click', sceneClick);
   newRound();
   requestAnimationFrame(tick);
 }
+
+// 자동 검증용 손잡이. 게임 로직은 이것을 읽지 않는다 (check-step5.mjs 가 쓴다).
+window.__wamc = {
+  get round() { return round; },
+  get gossip() { return gossipCount; },
+  memories, npcState, playerGrid,
+  warp(x, y) { playerGrid.x = x; playerGrid.y = y; playerPx.x = x * TS; playerPx.y = y * TS; },
+};
 
 boot();
 </script>

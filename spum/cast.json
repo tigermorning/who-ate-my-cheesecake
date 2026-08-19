@@ -1,218 +1,260 @@
 [
- {
-  "id": "sgn_haru",
-  "name": "하루",
-  "tags": [
-   "치즈케이크의밤",
-   "용의자"
-  ],
-  "persona": {
-   "gender": "female",
-   "personality": [
-    "밝음",
-    "다정",
-    "덜렁"
-   ],
-   "speechStyle": "말끝이 '~요'로 끝나는 밝은 존댓말. 느낌표가 많다. 긍정적 표현을 많이 쓴다.",
-   "background": "부엌에서 빵을 굽는 것을 좋아하는 베이커. 매일 아침 갓 구운 빵으로 집안을 가득 채운다. 요리에만 집중하면 주변을 잘 보지 못한다."
+  {
+    "id": "sgn_haru",
+    "name": "하루",
+    "tags": [
+      "치즈케이크의밤",
+      "용의자"
+    ],
+    "persona": {
+      "gender": "female",
+      "personality": [
+        "밝음",
+        "다정",
+        "덜렁"
+      ],
+      "speechStyle": "말끝이 '~요'로 끝나는 밝은 존댓말. 느낌표가 많다. 긍정적 표현을 많이 쓴다.",
+      "background": "부엌에서 빵을 굽는 것을 좋아하는 베이커. 매일 아침 갓 구운 빵으로 집안을 가득 채운다. 요리에만 집중하면 주변을 잘 보지 못한다.",
+      "mbti": "ENFP",
+      "traits": [
+        "덜렁이",
+        "주방 붙박이",
+        "남 잘 챙김"
+      ],
+      "occupation": "베이커"
+    },
+    "appearance": {
+      "equipment": {
+        "body": "legacy_body_human_1",
+        "eye": "legacy_eye_3",
+        "helmet": "modernpackver1_hoodie",
+        "clothing": "modernpackver1_winter1_c2",
+        "pants": "elf_elf_pant_06"
+      },
+      "colors": {
+        "body": "#FFE4B5",
+        "helmet": "#FFD700",
+        "clothing": "#FFFACD",
+        "pants": "#FFF8DC",
+        "eye": "#3A3630"
+      },
+      "maskEnabled": true
+    },
+    "scale": 1.0
   },
-  "appearance": {
-   "equipment": {
-    "body": "legacy_body_human_1",
-    "eye": "legacy_eye_3",
-    "helmet": "modernpackver1_hoodie",
-    "clothing": "modernpackver1_winter1_c2",
-    "pants": "elf_elf_pant_06"
-   },
-   "colors": {
-    "body": "#FFE4B5",
-    "helmet": "#FFD700",
-    "clothing": "#FFFACD",
-    "pants": "#FFF8DC",
-    "eye": "#3A3630"
-   },
-   "maskEnabled": true
+  {
+    "id": "sgn_mina",
+    "name": "미나",
+    "tags": [
+      "치즈케이크의밤",
+      "용의자"
+    ],
+    "persona": {
+      "gender": "female",
+      "personality": [
+        "조용",
+        "사려깊음",
+        "기억력좋음"
+      ],
+      "speechStyle": "짧고 정중한 말투. 감정을 잘 드러내지 않는다. 한 번에 한 가지만 말한다.",
+      "background": "밤하늘을 보며 시를 쓰는 시인. 조용한 서재에서 지내는 걸 좋아하고, 모든 것을 관찰한다.",
+      "mbti": "INFJ",
+      "traits": [
+        "관찰벽",
+        "말수 적음",
+        "기록광"
+      ],
+      "occupation": "시인"
+    },
+    "appearance": {
+      "equipment": {
+        "body": "legacy_body_human_4",
+        "eye": "legacy_eye_3",
+        "helmet": "elf_helmet_17",
+        "clothing": "elf_elf_cloth_09",
+        "pants": "elf_elf_pant_03"
+      },
+      "colors": {
+        "body": "#E6E6FA",
+        "helmet": "#9370DB",
+        "clothing": "#DDA0DD",
+        "pants": "#EE82EE",
+        "eye": "#3A3630"
+      },
+      "maskEnabled": true
+    },
+    "scale": 1.05
   },
-  "scale": 1.0
- },
- {
-  "id": "sgn_mina",
-  "name": "미나",
-  "tags": [
-   "치즈케이크의밤",
-   "용의자"
-  ],
-  "persona": {
-   "gender": "female",
-   "personality": [
-    "조용",
-    "사려깊음",
-    "기억력좋음"
-   ],
-   "speechStyle": "짧고 정중한 말투. 감정을 잘 드러내지 않는다. 한 번에 한 가지만 말한다.",
-   "background": "밤하늘을 보며 시를 쓰는 시인. 조용한 서재에서 지내는 걸 좋아하고, 모든 것을 관찰한다."
+  {
+    "id": "sgn_coco",
+    "name": "코코",
+    "tags": [
+      "치즈케이크의밤",
+      "용의자"
+    ],
+    "persona": {
+      "gender": "male",
+      "personality": [
+        "장난",
+        "활발",
+        "호기심"
+      ],
+      "speechStyle": "반말에 가까운 편한 말투. '~이지!', '~잖아!'로 끝낸다. 말이 빠르다.",
+      "background": "텃밭과 정원을 가꾸는 정원사. 작은 식물에도 이름을 붙여준다.호기심이 많아 돌아다니는 걸 좋아한다.",
+      "mbti": "ESFP",
+      "traits": [
+        "참견쟁이",
+        "발이 빠름",
+        "호기심"
+      ],
+      "occupation": "정원사"
+    },
+    "appearance": {
+      "equipment": {
+        "body": "legacy_body_human_2",
+        "eye": "legacy_eye_3",
+        "helmet": "legacy_helmet_1",
+        "clothing": "modernpackver1_hoodie_c2",
+        "pants": "elf_elf_pant_04"
+      },
+      "colors": {
+        "body": "#90EE90",
+        "helmet": "#228B22",
+        "clothing": "#98FB98",
+        "pants": "#F0FFF0",
+        "eye": "#3A3630"
+      },
+      "maskEnabled": true
+    },
+    "scale": 1.1
   },
-  "appearance": {
-   "equipment": {
-    "body": "legacy_body_human_4",
-    "eye": "legacy_eye_3",
-    "helmet": "elf_helmet_17",
-    "clothing": "elf_elf_cloth_09",
-    "pants": "elf_elf_pant_03"
-   },
-   "colors": {
-    "body": "#E6E6FA",
-    "helmet": "#9370DB",
-    "clothing": "#DDA0DD",
-    "pants": "#EE82EE",
-    "eye": "#3A3630"
-   },
-   "maskEnabled": true
+  {
+    "id": "sgn_lulu",
+    "name": "루루",
+    "tags": [
+      "치즈케이크의밤",
+      "용의자"
+    ],
+    "persona": {
+      "gender": "female",
+      "personality": [
+        "나른",
+        "몽상",
+        "상상력"
+      ],
+      "speechStyle": "말이 느리고 흐릿하다. '~인 것 같아', '~할지도'처럼 확신이 없다. 하품이 섞인다.",
+      "background": "하늘을 보며 그림을 그리는 화가. 낮잠이 많고, 꿈 이야기를 자주 한다.",
+      "mbti": "INFP",
+      "traits": [
+        "졸음",
+        "몽상",
+        "시간 감각 흐림"
+      ],
+      "occupation": "화가"
+    },
+    "appearance": {
+      "equipment": {
+        "body": "legacy_body_elf_1",
+        "eye": "legacy_eye_3",
+        "helmet": "elf_helmet_06",
+        "clothing": "legacy_f_sr_cloth",
+        "pants": "legacy_f_sr_pants"
+      },
+      "colors": {
+        "body": "#87CEEB",
+        "helmet": "#4682B4",
+        "clothing": "#B0E0E6",
+        "pants": "#E0FFFF",
+        "eye": "#3A3630"
+      },
+      "maskEnabled": true
+    },
+    "scale": 0.95
   },
-  "scale": 1.05
- },
- {
-  "id": "sgn_coco",
-  "name": "코코",
-  "tags": [
-   "치즈케이크의밤",
-   "용의자"
-  ],
-  "persona": {
-   "gender": "male",
-   "personality": [
-    "장난",
-    "활발",
-    "호기심"
-   ],
-   "speechStyle": "반말에 가까운 편한 말투. '~이지!', '~잖아!'로 끝낸다. 말이 빠르다.",
-   "background": "텃밭과 정원을 가꾸는 정원사. 작은 식물에도 이름을 붙여준다.호기심이 많아 돌아다니는 걸 좋아한다."
+  {
+    "id": "sgn_peach",
+    "name": "피치",
+    "tags": [
+      "치즈케이크의밤",
+      "용의자"
+    ],
+    "persona": {
+      "gender": "female",
+      "personality": [
+        "명랑",
+        "음악",
+        "사교적"
+      ],
+      "speechStyle": "활기찬 말투. 노래 가사를 인용하거나 리듬감 있게 말한다. '~♪', '~인 거야!'처럼.",
+      "background": "기타를 치며 노래를 부르는 음악가. 파티를 좋아하고, 사람들이 모이면 반드시 노래를 부른다.",
+      "mbti": "ENFJ",
+      "traits": [
+        "분위기 메이커",
+        "귀가 밝음",
+        "수다"
+      ],
+      "occupation": "음악가"
+    },
+    "appearance": {
+      "equipment": {
+        "body": "legacy_body_human_3",
+        "eye": "legacy_eye_3",
+        "helmet": "elf_helmet_12",
+        "clothing": "modernpackver1_hoodie",
+        "pants": "elf_elf_pant_06"
+      },
+      "colors": {
+        "body": "#FFB6C1",
+        "helmet": "#FF69B4",
+        "clothing": "#FFC0CB",
+        "pants": "#FFE4E1",
+        "eye": "#3A3630"
+      },
+      "maskEnabled": true
+    },
+    "scale": 1.0
   },
-  "appearance": {
-   "equipment": {
-    "body": "legacy_body_human_2",
-    "eye": "legacy_eye_3",
-    "helmet": "legacy_helmet_1",
-    "clothing": "modernpackver1_hoodie_c2",
-    "pants": "elf_elf_pant_04"
-   },
-   "colors": {
-    "body": "#90EE90",
-    "helmet": "#228B22",
-    "clothing": "#98FB98",
-    "pants": "#F0FFF0",
-    "eye": "#3A3630"
-   },
-   "maskEnabled": true
-  },
-  "scale": 1.1
- },
- {
-  "id": "sgn_lulu",
-  "name": "루루",
-  "tags": [
-   "치즈케이크의밤",
-   "용의자"
-  ],
-  "persona": {
-   "gender": "female",
-   "personality": [
-    "나른",
-    "몽상",
-    "상상력"
-   ],
-   "speechStyle": "말이 느리고 흐릿하다. '~인 것 같아', '~할지도'처럼 확신이 없다. 하품이 섞인다.",
-   "background": "하늘을 보며 그림을 그리는 화가. 낮잠이 많고, 꿈 이야기를 자주 한다."
-  },
-  "appearance": {
-   "equipment": {
-    "body": "legacy_body_elf_1",
-    "eye": "legacy_eye_3",
-    "helmet": "elf_helmet_06",
-    "clothing": "legacy_f_sr_cloth",
-    "pants": "legacy_f_sr_pants"
-   },
-   "colors": {
-    "body": "#87CEEB",
-    "helmet": "#4682B4",
-    "clothing": "#B0E0E6",
-    "pants": "#E0FFFF",
-    "eye": "#3A3630"
-   },
-   "maskEnabled": true
-  },
-  "scale": 0.95
- },
- {
-  "id": "sgn_peach",
-  "name": "피치",
-  "tags": [
-   "치즈케이크의밤",
-   "용의자"
-  ],
-  "persona": {
-   "gender": "female",
-   "personality": [
-    "명랑",
-    "음악",
-    "사교적"
-   ],
-   "speechStyle": "활기찬 말투. 노래 가사를 인용하거나 리듬감 있게 말한다. '~♪', '~인 거야!'처럼.",
-   "background": "기타를 치며 노래를 부르는 음악가. 파티를 좋아하고, 사람들이 모이면 반드시 노래를 부른다."
-  },
-  "appearance": {
-   "equipment": {
-    "body": "legacy_body_human_3",
-    "eye": "legacy_eye_3",
-    "helmet": "elf_helmet_12",
-    "clothing": "modernpackver1_hoodie",
-    "pants": "elf_elf_pant_06"
-   },
-   "colors": {
-    "body": "#FFB6C1",
-    "helmet": "#FF69B4",
-    "clothing": "#FFC0CB",
-    "pants": "#FFE4E1",
-    "eye": "#3A3630"
-   },
-   "maskEnabled": true
-  },
-  "scale": 1.0
- },
- {
-  "id": "sgn_ruby",
-  "name": "루비",
-  "tags": [
-   "치즈케이크의밤",
-   "용의자"
-  ],
-  "persona": {
-   "gender": "female",
-   "personality": [
-    "도도",
-    "까다로움",
-    "정확"
-   ],
-   "speechStyle": "도도한 존댓말. '~이랍니다', '~거죠'로 끝낸다. 틀리면 바로 짚어준다.",
-   "background": "완벽한 요리를 추구하는 요리사. 재료 하나하나에 엄격하고, 레시피에서 벗어나는 걸 싫어한다."
-  },
-  "appearance": {
-   "equipment": {
-    "body": "legacy_body_human_1",
-    "eye": "legacy_eye_3",
-    "helmet": "elf_helmet_12",
-    "clothing": "legacy_f_sr_cloth",
-    "pants": "legacy_f_sr_pants"
-   },
-   "colors": {
-    "body": "#FF6347",
-    "helmet": "#DC143C",
-    "clothing": "#FF4500",
-    "pants": "#FF7F50",
-    "eye": "#3A3630"
-   },
-   "maskEnabled": true
-  },
-  "scale": 1.05
- }
+  {
+    "id": "sgn_ruby",
+    "name": "루비",
+    "tags": [
+      "치즈케이크의밤",
+      "용의자"
+    ],
+    "persona": {
+      "gender": "female",
+      "personality": [
+        "도도",
+        "까다로움",
+        "정확"
+      ],
+      "speechStyle": "도도한 존댓말. '~이랍니다', '~거죠'로 끝낸다. 틀리면 바로 짚어준다.",
+      "background": "완벽한 요리를 추구하는 요리사. 재료 하나하나에 엄격하고, 레시피에서 벗어나는 걸 싫어한다.",
+      "mbti": "ISTJ",
+      "traits": [
+        "꼼꼼함",
+        "시간 정확",
+        "지적질"
+      ],
+      "occupation": "요리사"
+    },
+    "appearance": {
+      "equipment": {
+        "body": "legacy_body_human_1",
+        "eye": "legacy_eye_3",
+        "helmet": "elf_helmet_12",
+        "clothing": "legacy_f_sr_cloth",
+        "pants": "legacy_f_sr_pants"
+      },
+      "colors": {
+        "body": "#FF6347",
+        "helmet": "#DC143C",
+        "clothing": "#FF4500",
+        "pants": "#FF7F50",
+        "eye": "#3A3630"
+      },
+      "maskEnabled": true
+    },
+    "scale": 1.05
+  }
 ]

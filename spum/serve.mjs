@@ -104,14 +104,23 @@ const server = http.createServer(async (req, res) => {
     return res.end(BRIDGE_JS.replace('PORT_HERE', String(PORT)));
   }
 
-  // SPUM 런타임은 model 을 비운 채로 부른다 — 그대로 넘기면 SAM 이
-// `Unknown model: ''` 로 404 를 준다. 여기서 빈 자리를 채워 준다.
+  // SPUM 런타임은 모델 자리에 **품질 등급 이름**을 보낸다 (`aiConfig.qualityMode`).
+// 실측: `{"model":"medium"}` → SAM 이 `Unknown model: 'medium'` 로 404.
+// 비어 있는 경우도 마찬가지다. 여기서 등급을 실제 SAM 모델로 옮긴다.
 const SAM_MODEL = env.SAM_MODEL || 'claude-haiku-4-5';
+const SAM_TIER = {
+  '': SAM_MODEL,
+  low: 'claude-haiku-4-5', fast: 'claude-haiku-4-5', economy: 'claude-haiku-4-5',
+  medium: 'claude-sonnet-4.6', balanced: 'claude-sonnet-4.6', normal: 'claude-sonnet-4.6',
+  high: 'claude-opus-4.8', best: 'claude-opus-4.8', quality: 'claude-opus-4.8',
+};
 function normalizeSamBody(raw) {
   let o;
   try { o = JSON.parse(raw); } catch { return raw; }
   if (!o || typeof o !== 'object') return raw;
-  if (typeof o.model !== 'string' || !o.model.trim()) o.model = SAM_MODEL;
+  const asked = typeof o.model === 'string' ? o.model.trim() : '';
+  if (!asked) o.model = SAM_MODEL;
+  else if (SAM_TIER[asked.toLowerCase()]) o.model = SAM_TIER[asked.toLowerCase()];
   // /generate 모양(prompt)으로 오면 chat 모양(messages)으로 바꾼다
   if (!Array.isArray(o.messages) || !o.messages.length) {
     const prompt = o.prompt || o.input || o.text;
@@ -128,8 +137,16 @@ function normalizeSamBody(raw) {
 
 // ── SAM 대리 호출. 키는 서버에서만 붙인다 ──────────────────
   // SPUM 런타임은 /api/sam/v1/generate 를 사용한다
+  if (url.pathname.startsWith('/api/sam/') && req.method !== 'POST') {
+    // 런타임이 POST 가 아닌 방법으로 부르면 여기서 잡아 로그를 남긴다 — 조용한 404 를 막는다
+    console.log('[SAM] 이상한 호출:', req.method, url.pathname);
+    res.writeHead(405, { 'Content-Type': 'application/json; charset=utf-8', 'Allow': 'POST' });
+    return res.end(JSON.stringify({ error: 'POST 로만 받는다', method: req.method, path: url.pathname }));
+  }
   if ((url.pathname === '/api/sam/generate' || url.pathname === '/api/sam/v1/generate') && req.method === 'POST') {
-    const body = normalizeSamBody(await readBody(req));
+    const raw = await readBody(req);
+    console.log('[SAM] 요청:', url.pathname, String(raw).slice(0, 200));
+    const body = normalizeSamBody(raw);
     if (!SAM_KEY) {
       // 키가 없으면 로그인된 SPUM 탭(다리)에게 부탁한다
       const id = 'j' + (jobSeq++);
@@ -149,6 +166,7 @@ function normalizeSamBody(raw) {
         body,
       });
       const text = await up.text();
+      if (up.status >= 400) console.log('[SAM] 상류 오류', up.status, text.slice(0, 200));
       res.writeHead(up.status, { 'Content-Type': up.headers.get('content-type') || 'application/json' });
       return res.end(text);
     } catch (e) {
@@ -156,6 +174,9 @@ function normalizeSamBody(raw) {
       return res.end(JSON.stringify({ error: String(e.message || e) }));
     }
   }
+
+  // 아이콘은 없다. 404 로그를 남기지 않는다.
+  if (url.pathname === '/favicon.ico') { res.writeHead(204); return res.end(); }
 
   // ── 키가 붙어 있는지만 알려 준다. 값은 주지 않는다 ─────────
   if (url.pathname === '/api/health') {

@@ -81,6 +81,12 @@ export function makeRound(seed = Date.now() % 2147483647, playerId = null) {
     }
     const theftHour = pick(r, kitchenHours);
 
+    // 범인의 알리바이 거짓말 — 범행 시각에 딴 방에 있었다고 말한다.
+    // 그 방에 실제로 있던 사람이 하나는 있어야 깨진다("거기 있었는데 못 봤다").
+    const occupied = ROOMS.filter(x => x !== '부엌'
+      && CAST.some(c => c.id !== culprit && paths[c.id][theftHour] === x));
+    const alibiLie = occupied.length ? { hour: theftHour, room: pick(r, occupied) } : null;
+
     // 방패: 여섯에게 서로 다른 것을 하나씩. 참·거짓은 따로 뽑는다.
     const shieldPool = shuffle(r, SHIELDS).slice(0, CAST.length);
     const shields = {};
@@ -125,7 +131,7 @@ export function makeRound(seed = Date.now() % 2147483647, playerId = null) {
     // 범인의 알리바이에는 구멍이 있어야 한다 — 범행 시각에 아무도 그를 못 봤다는 것 자체가 구멍이다.
     return {
       seed, paths, culprit, theftHour, theftRoom: '부엌',
-      accomplice, planted, shields, shieldClues, playerId,
+      accomplice, planted, shields, shieldClues, playerId, alibiLie,
       cast: CAST, rooms: ROOMS, hours: HOURS,
     };
   }
@@ -150,6 +156,10 @@ export function knowledgeOf(round, id) {
     isAccomplice: round.accomplice === id,
     knows: round.shieldClues.filter(c => c.knownBy === id),
   };
+  // 범인은 범행 시각 자기 자리를 절대 그대로 말하지 않는다. 대신 준비한 거짓말이 있다.
+  if (round.culprit === id && round.alibiLie) {
+    out.alibiLie = { hour: hours[round.alibiLie.hour], room: round.alibiLie.room };
+  }
   // 포섭된 사람은 거짓 목격 하나를 얹어 말한다. 그 자신도 그것이 거짓임을 안다.
   if (round.accomplice === id && round.planted) {
     out.planted = { hour: hours[round.planted.hour], room: round.planted.room, who: round.planted.subject };
@@ -164,6 +174,7 @@ export function approvedClaims(round, id) {
   k.own.forEach(o => claims.add(`${o.hour}|${o.room}|자기`));
   k.seen.forEach(s => claims.add(`${s.hour}|${s.room}|${nameOf(round, s.who)}`));
   if (k.planted) claims.add(`${k.planted.hour}|${k.planted.room}|${nameOf(round, k.planted.who)}`);
+  if (k.alibiLie) claims.add(`${k.alibiLie.hour}|${k.alibiLie.room}|자기`);
   return claims;
 }
 

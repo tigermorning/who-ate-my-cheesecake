@@ -2,11 +2,14 @@
 // SAM 은 문장을 짓고, 사실은 round.mjs 가 소유한다.
 
 import { knowledgeOf, nameOf, HOURS, ROOMS } from './round.mjs';
+import { factLines, heardPairs, heardNames } from './memory.mjs';
 
 // SAM 에서 실제로 열려 있는 모델
 export const MODEL = { fast: 'claude-haiku-4-5', normal: 'claude-sonnet-4.6', best: 'claude-opus-4.8' };
 
 // ── 성격 카드 ──────────────────────────────────────────────
+// 성격·MBTI·말투·내력의 정본은 **SPUM Cast** (`cast.json` 의 persona) 다.
+// 아래 표는 말투 예문(few-shot)만 들고 있다 — Cast 스키마에 없는 값이라 여기 남긴다.
 export const VOICE = {
   sgn_haru: {
     tone: '밝고 다정한 존댓말. 느낌표가 많다. 긍정적 표현을 즐긴다.',
@@ -54,7 +57,7 @@ export function classifyIntent(text) {
 }
 
 // ── 승인된 사실 카드 ────────────────────────────────────────
-export function factSheet(round, id, intent = null) {
+export function factSheet(round, id, intent = null, mem = null) {
   const k = knowledgeOf(round, id);
   const act = intent?.act || 'UNKNOWN';
   const L = [];
@@ -74,7 +77,14 @@ export function factSheet(round, id, intent = null) {
   if (k.knows.length) {
     L.push('· 네가 알고 있는 남의 사정: ' + k.knows.map(c => `${nameOf(round, c.about)} — ${c.text}`).join(' / ') + ' (묻거든 말해도 된다)');
   }
+  // 살면서 전해 들은 것 — 반드시 출처를 달고 말한다
+  factLines(round, mem).forEach(line => L.push(line));
   if (k.isCulprit) {
+    if (k.alibiLie) {
+      L.push('· 범행 시각(' + k.alibiLie.hour + ') 자기 자리는 절대 사실대로 말하지 않는다. '
+        + '그 시각엔 ' + k.alibiLie.room + '에 있었다고 말한다 — 이것이 네가 준비한 거짓말이다.');
+      L.push('· 그 방에 정말 있던 사람이 "거기 없었다"고 하면 당황한다. 그래도 한 번은 더 우긴다.');
+    }
     L.push('· 케이크를 먹은 것은 너다. 절대 먼저 자백하지 않는다. 다만 거짓 목격을 새로 지어내지도 않는다 — 아는 것을 골라서 말하고, 모르는 척하고, 화제를 돌린다.');
     if (round.accomplice) L.push('· ' + nameOf(round, round.accomplice) + '이(가) 너를 감싸 주기로 했다. 그 이야기를 먼저 꺼내지 않는다.');
   }
@@ -87,7 +97,23 @@ export function factSheet(round, id, intent = null) {
 }
 
 // ── 프롬프트 조립 ────────────────────────────────────────────
-export function buildMessages({ round, id, world, history = [], userText, mood = null, intent = null }) {
+// SPUM Cast persona → 프롬프트 줄. 플레이어에게는 절대 쓰지 않는다.
+export function personaLines(persona, fallbackTone = '') {
+  if (!persona) return fallbackTone ? ['말투: ' + fallbackTone] : [];
+  const L = [];
+  const p = [].concat(persona.personality || []).filter(Boolean);
+  if (p.length) L.push('성격: ' + p.join(' · '));
+  if (persona.mbti) L.push('MBTI: ' + persona.mbti + ' — 이 유형이 할 법한 반응을 고른다');
+  const tr = [].concat(persona.traits || []).filter(Boolean);
+  if (tr.length) L.push('버릇: ' + tr.join(', '));
+  L.push('말투: ' + (persona.speechStyle || fallbackTone));
+  if (persona.background) L.push('내력: ' + persona.background);
+  return L;
+}
+
+export function buildMessages({ round, id, world, history = [], userText, mood = null, intent = null, mem = null, persona = null }) {
+  // 플레이어 캐릭터는 AI 가 대신 말하지 않는다 — 인격도 SAM 에 보내지 않는다.
+  if (round.playerId && id === round.playerId) throw new Error('플레이어 캐릭터는 SAM 이 대신 말하지 않는다');
   const v = VOICE[id] || { tone: '', shots: [] };
   const act = intent?.act || 'UNKNOWN';
   const actHint = {
@@ -96,25 +122,28 @@ export function buildMessages({ round, id, world, history = [], userText, mood =
     ASK_ABOUT: '질문은 특정 인물의 행적을 묻는 것이다. 그 사람이 같은 방에 있었으면 말하고, 모르면 모른다고 답한다.',
     ASK_WHEREABOUTS: '질문은 자기나 남의 행적을 묻는 것이다. 자기 자리를 한두 시간치만 말하고, 나머지는 모른다고 한다.',
     FOLLOW_UP: '이전 대화의 화제를 이어가는 질문이다. 앞서 말한 시각·장소를 기준으로 답한다.',
-    GREET: '인사다. 짧게 받으면 된다.',
-    SOCIAL: '잡담이다. 정보를 억지로 끼워 넣지 않는다.',
-    UNKNOWN: '분류가 안 되는 말이다. 짧게 되물거나 잡담으로 받는다.',
-  }[act] || '분류가 안 되는 말이다. 짧게 되물거나 잡담으로 받는다.';
+    GREET: '인사다. 네 성격대로 받고, 하고 싶은 말이 있으면 덧붙여도 된다.',
+    SOCIAL: '잡담이다. 사건 정보를 억지로 끼워 넣지 않는다. 사람처럼 대화한다.',
+    UNKNOWN: '사건과 무관한 말일 수 있다. 분류하려 들지 말고 네 성격대로 자연스럽게 받아라.',
+  }[act] || '사건과 무관한 말일 수 있다. 분류하려 들지 말고 네 성격대로 자연스럽게 받아라.';
   const sys = [
     world.join('\n'),
     '',
-    `[너의 배역] ${nameOf(round, id)} — ${(round.cast.find(c => c.id === id) || {}).species}`,
-    '말투: ' + v.tone,
+    `[너의 배역] ${nameOf(round, id)} — ${persona?.occupation || (round.cast.find(c => c.id === id) || {}).species} (SPUM Cast)`,
+    ...personaLines(persona, v.tone),
     '말투 예문 (그대로 베끼지 말고 결만 따른다):',
     ...v.shots.map(s => '  · ' + s),
     '',
-    factSheet(round, id, intent),
+    factSheet(round, id, intent, mem),
     '',
     '[대답하는 법]',
     '· ' + actHint,
     '· 두세 문장을 넘기지 않는다. 시각과 장소를 한 번에 세 칸 이상 늘어놓지 않는다.',
-    '· 묻지 않은 것은 말하지 않는다. 대신 짧게 되물어도 좋다.',
+    '· 묻지 않은 사건 정보는 먼저 흘리지 않는다. 다만 대화 자체는 열려 있다 —',
+    '  날씨든 빵이든 상대 이야기든, 물어오면 네 성격대로 편하게 받고 되물어도 된다.',
+    '· 정해진 문장 틀에 맞추지 마라. 매번 다르게 말한다.',
     '· 상대는 같이 사는 고양이다. 심문관이 아니다. 편하게 대한다.',
+    '· 남에게 전해 들은 이야기는 출처를 밝히고 말한다. 네가 직접 본 것처럼 말하지 않는다.',
     mood ? '· 지금 기분: ' + mood : '',
   ].filter(Boolean).join('\n');
 
@@ -124,12 +153,14 @@ export function buildMessages({ round, id, world, history = [], userText, mood =
 }
 
 // ── 검증 ────────────────────────────────────────────────────
-export function violations(round, id, text) {
+export function violations(round, id, text, mem = null) {
   const k = knowledgeOf(round, id);
   const ok = new Set();
   k.own.forEach(o => ok.add(o.hour + '|' + o.room));
   k.seen.forEach(s => ok.add(s.hour + '|' + s.room));
   if (k.planted) ok.add(k.planted.hour + '|' + k.planted.room);
+  if (k.alibiLie) ok.add(k.alibiLie.hour + '|' + k.alibiLie.room);
+  heardPairs(mem).pairs.forEach(p => ok.add(p));      // 전해 들은 자리도 입에 올릴 수 있다
 
   const hits = [];
   for (const sent of text.split(/[.!?\n]/)) {
@@ -141,6 +172,52 @@ export function violations(round, id, text) {
   }
   const sawNames = round.cast.filter(c => c.id !== id && text.includes(c.name) && /봤|보였|있었/.test(text)).map(c => c.name);
   const allowedNames = new Set(k.seen.map(s => nameOf(round, s.who)).concat(k.planted ? [nameOf(round, k.planted.who)] : []));
+  heardNames(round, mem).forEach(n => allowedNames.add(n));
   sawNames.forEach(n => { if (!allowedNames.has(n)) hits.push({ kind: 'person', who: n }); });
   return { ok: hits.length === 0, hits, hoursIn: HOURS.filter(h => text.includes(h)), roomsIn: ROOMS.filter(r => text.includes(r)) };
+}
+
+// ── 질문의 주제 한 마디 ─────────────────────────────────────
+// NPC 가 "고양이가 무엇을 캐고 다니는지" 를 기억하고 서로 옮기는 데 쓴다.
+export function topicOf(intent, text = '') {
+  if (!intent) return null;
+  const bits = [];
+  if (intent.person) bits.push(intent.person);
+  if (intent.room) bits.push(intent.room);
+  if (intent.hour != null) bits.push((intent.hour > 24 ? intent.hour - 24 : intent.hour) + '시');
+  const act = {
+    ASK_EATEN: '케이크를 먹은 사람',
+    ASK_SIGHTING: '누구를 봤는지',
+    ASK_ABOUT: '의 행적',
+    ASK_WHEREABOUTS: '어젯밤 자리',
+    FOLLOW_UP: '그 뒤의 행적',
+  }[intent.act];
+  if (!act) return null;
+  return (bits.length ? bits.join(' ') : '') + (act.startsWith('의') ? act : (bits.length ? ' ' : '') + act);
+}
+
+// ── NPC 끼리의 한마디 ───────────────────────────────────────
+// 소문은 문장까지 SAM 이 짓는다. 사실은 memory.mjs 가 고른 한 조각으로 고정된다 —
+// SAM 은 그 한 조각을 **그 캐릭터의 입으로** 옮기기만 한다.
+export function buildGossipMessages({ round, speakerId, listenerId, persona, fact, kind }) {
+  if (round.playerId && speakerId === round.playerId) throw new Error('플레이어는 SAM 이 대신 말하지 않는다');
+  const v = VOICE[speakerId] || { tone: '', shots: [] };
+  const heard = kind === 'place';
+  const sys = [
+    `[너의 배역] ${nameOf(round, speakerId)} — ${persona?.occupation || ''} (SPUM Cast)`,
+    ...personaLines(persona, v.tone),
+    '',
+    `[상황] 집 안에서 ${nameOf(round, listenerId)}와(과) 마주쳤다. 아래 사실 하나를 흘리듯 건넨다.`,
+    `[전할 사실] ${fact}`,
+    heard ? '[주의] 이건 네가 직접 본 게 아니라 전해 들은 이야기다. 반드시 출처를 밝혀 말한다.'
+          : '[주의] 이건 네가 직접 겪거나 본 것이다.',
+    '',
+    '[쓰는 법]',
+    '· 한 문장. 길어도 두 문장.',
+    '· 시각·장소·사람 이름을 바꾸지 않는다. 없는 사실을 보태지 않는다.',
+    '· 상대 이름을 부르거나 말을 걸듯이. 보고서처럼 읽히면 실패다.',
+    '· 네 말투 그대로. 같은 사실이라도 매번 다르게 말한다.',
+  ].join('\n');
+  return [{ role: 'system', content: sys },
+    { role: 'user', content: `${nameOf(round, listenerId)}에게 그 이야기를 건네라.` }];
 }

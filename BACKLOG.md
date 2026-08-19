@@ -26,11 +26,35 @@
 - [x] **플레이어를 캐스트 6종 중 하나로** — 「나(고양이)」 삭제. 시작할 때 고르고, 고른 캐릭터는
       범인에서 빠진다(`makeRound(seed, playerId)`). 플레이어도 SPUM 런타임이 그린다
 
-- [x] **SPUM 월드 AI 의 SAM 호출 404 해결** (08-19) — 런타임이 `model` 을 빈값으로 보내
-      SAM 이 `Unknown model: ''` 404 를 줬다. `serve.mjs` 에 `normalizeSamBody()` 추가:
-      빈/없는 `model` 을 `SAM_MODEL`(기본 `claude-haiku-4-5`)로 채우고, `prompt` 모양이 오면
-      `messages` 로 바꾸고, `max_tokens` 기본 512 를 넣는다.
-      실측: 빈 모델 → 200, model 필드 없음 + prompt → 200 (둘 다 응답 정상)
+- [x] **SPUM 월드 AI 의 SAM 호출 404 해결** (08-19) — ⚠️ 원인 진단이 백로그와 달랐다.
+      런타임이 보내는 모델은 빈값이 아니라 **`"medium"`** — SPUM 의 품질 등급(`aiConfig.qualityMode`)
+      이름을 그대로 보낸다. 서버 로그 실측: `{"model":"medium", ... "너는 자율 캐릭터의 행동 디렉터다"}`
+      → SAM `Unknown model: 'medium'` 404. `serve.mjs` 의 `normalizeSamBody()` 가 등급→모델로 옮긴다
+      (low/fast→haiku, medium/balanced→sonnet, high/best→opus, 빈값→`SAM_MODEL`).
+      `repair-characters.mjs` 도 `aiConfig.model`/`talkConfig.model` 에 실제 모델을 박는다.
+      실측: 브라우저 실행 6회 호출 전부 200, 상류 오류 0
+
+- [x] **Step 5: NPC 기억 + 소통** (08-19) — `spum/memory.mjs` 신설
+      · 기억: 씨앗(자기 동선·목격·남의 사정) → 마주치면 한 조각씩 전달, 받은 쪽은 **출처**를 단다
+      · 범인은 범행 시각 자기 자리를 안 흘린다. 대신 **알리바이 거짓말**(`round.alibiLie` 신설)을 민다
+      · 플레이어의 질문도 `asked` 로 기억돼 퍼진다
+      · **엿듣기** — 플레이어가 5칸 안이면 소문이 대화창+증언판에 오른다 (대화 예산 안 씀)
+      · 소문 문장은 **SAM 이 짓는다** (`buildGossipMessages`). 사실은 memory 가 고른 한 조각으로 고정
+      실측: 브라우저 40초에 소문 16건, 기억 9→21, 엿들은 줄 10건, 증언판 9/36 칸
+
+- [x] **인격을 SPUM Cast 정본으로** (08-19) — `cast.json` persona 에 `mbti`/`traits`/`occupation` 채움.
+      NPC 프롬프트는 성격·MBTI·버릇·말투·내력을 Cast 에서 읽는다.
+      **플레이어가 고른 캐릭터는 인격에서 풀린다** — `castPersona` 에서 지워 SAM 에 실릴 길을 없앴고,
+      `buildMessages`/`buildGossipMessages` 는 플레이어 id 로 부르면 예외를 던진다
+
+- [x] **증언판이 비어 있던 버그** (08-19) — `renderBoard()` 가 행을 만들고 `t.append(tr)` 를 안 했다.
+      헤더만 그려지고 36칸이 통째로 없었다. 원래 있던 버그다
+
+- [x] **캐릭터 크기 + 로스터 얼굴** (08-19) — `UNIT_SCALE` 0.055 → **0.12** (허용 0.035~0.35).
+      로스터 아이콘의 이모지(🌙·🎵)는 자리표시자였다 → SPUM `createCharacterPreview` 의
+      `captureThumbnail()` 로 **진짜 초상을 구워** 건다. SPKG 는 월드 런타임이 올린 것을 공유한다
+
+- [x] **게임 설명서** — `WHO_ATE_MY_CHEESECAKE_GAME_GUIDE_KO.md`
 
 ## 지금 하는 것
 - (없음 — 아래 「다음」의 Step 5 부터)

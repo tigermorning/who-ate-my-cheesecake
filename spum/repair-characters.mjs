@@ -16,6 +16,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// SPUM Studio 의 모델 칸. 비워 두면 런타임이 등급 이름을 SAM 에 그대로 보낸다.
+const SAM_MODEL = 'claude-sonnet-4.6';
+
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const PROFILE = path.join(process.env.TEMP || process.env.LOCALAPPDATA, 'spum-chrome-profile');
 const STUDIO_URL = 'https://spum.soonsoon.ai/studio/?section=character';
@@ -51,6 +54,8 @@ function buildCharacter(c) {
     speechStyle: c.persona?.speechStyle ?? '',
     background: c.persona?.background ?? '',
     occupation: c.persona?.occupation ?? t.persona.occupation,
+    mbti: c.persona?.mbti ?? t.persona.mbti,
+    traits: c.persona?.traits ?? [],
     traits: [],
   };
 
@@ -67,13 +72,15 @@ function buildCharacter(c) {
 
   t.aiConfig = {
     ...t.aiConfig,
+    model: SAM_MODEL,
     enabled: true,
     decisionMode: 'local_fsm',
     extraPrompt: c.persona?.speechStyle || '',
     role: { title: c.persona?.occupation || '', goal: '' },
     state: { ...t.aiConfig.state, currentSituation: '', updatedAt: '' },
   };
-  t.talkConfig = { model: '', systemPrompt: '' };   // 대화는 SAM 직접 호출로 간다 (CLAUDE.md ⛔3)
+  // 모델 자리를 비워 두면 런타임이 등급 이름(`medium`)을 보내고 SAM 이 404 를 준다.
+  t.talkConfig = { model: SAM_MODEL, systemPrompt: '' };   // 대화 자체는 SAM 직접 호출로 간다 (CLAUDE.md ⛔3)
 
   // 남의 기억을 물려받으면 안 된다 — 전부 비운다
   t.runtime = { ...t.runtime, mood: 'happy', energy: 100, activity: 'idle', lastThought: '' };
