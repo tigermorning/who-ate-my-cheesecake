@@ -20,15 +20,11 @@ for (const p of PROPS) {
   }
 }
 
-// 칸 -> 참조 그림에서 가져올 자리
+// 칸 -> 참조 그림에서 가져올 자리.
+// 모든 칸이 **자기 자리**를 쓴다. 방마다 표본 한 칸을 반복해 깔면
+// 그림이 늘어나 보이고 엉뚱한 자리로 매핑된다 (벽난로만 멀쩡했던 이유가 이것이다).
 const src = new Array(W * H);
-for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-  const ch = GRID[y][x];
-  const border = x === 0 || y === 0 || x === W - 1 || y === H - 1;
-  if (ch === '#' || propCells[y * W + x]) { src[y * W + x] = [x, y]; continue; }
-  const s = picked[ch] || picked['.'];
-  src[y * W + x] = [s.x, s.y];
-}
+for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) src[y * W + x] = [x, y];
 
 const b = await chromium.connectOverCDP('http://127.0.0.1:9222');
 const ctx = b.contexts()[0];
@@ -45,6 +41,7 @@ const out = await page.evaluate(async ({ W, H, src, COLS }) => {
   big.width = W * 32; big.height = H * 32;
   const bg = big.getContext('2d');
   bg.imageSmoothingEnabled = true;
+  bg.imageSmoothingQuality = 'high';       // 1375x1144 -> 1408x1152 한 번만
   bg.drawImage(img, 0, 0, big.width, big.height);
 
   const index = new Map(), tiles = [], layer = new Array(W * H);
