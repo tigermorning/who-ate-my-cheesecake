@@ -575,7 +575,11 @@ window.addEventListener('keydown', e => {
   if (e.key === ' ' || e.code === 'Space') {
     e.preventDefault();
     if (chatOpen()) $('#say')?.focus();
-    else if (nearestNPC) { cur = nearestNPC; renderRoster(); renderLog(); openChat(); }
+    else {
+      // 옆에 사람이 있으면 그 사람과, 없으면 마지막으로 이야기하던 상대와 이어간다
+      const who = nearestNPC || cur;
+      if (who) { cur = who; renderRoster(); renderLog(); openChat(); }
+    }
   }
 });
 
