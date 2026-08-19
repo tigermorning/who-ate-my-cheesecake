@@ -82,6 +82,39 @@ SAM 이 `Unknown model: ''` 로 404. `serve.mjs` 는 body 를 그대로 흘리�
 - 검증: `{"model":""}` → 200, `{"prompt":"..."}` (model 없음) → 200. 둘 다 정답 응답.
 - 모델을 바꾸려면 `.env` 에 `SAM_MODEL=` 을 적는다.
 
+
+## 2026-08-19 저녁 — 맵을 진짜 SPUM 공간으로 (Claude Code)
+
+### 캐릭터가 벽·가구 위를 걸어 다닌 진짜 원인 ★★★★★
+`StudioSpumWorldRuntime.setGrid()` 의 격자는 **1 = 걸을 수 있음** 이다
+(소스 확인: grid 를 안 주면 `new Uint8Array(w*h).fill(1)` 로 채운다 = 전부 통행 가능).
+그런데 `play.html` 은 **막힘표(1 = 막힘)** 를 그대로 넘기고 있었다. 정확히 뒤집힌 값이라
+런타임에게는 **벽이 길이고 바닥이 벽**이었다. 그래서 런타임 FSM 이 캐릭터를 가구 위로 걸어 보냈다.
+- 조치: `spumWalk = obstacle ? 0 : 1` 을 만들어 런타임에 준다. signature 에 내용 해시를 붙여
+  도면이 바뀌면 `setGrid` 가 다시 돌게 했다 (`house-32x32-<hash>`).
+- 실측: 런타임 `getActors()` 120회 표본 — 막힌 칸 위 **4 → 0**
+
+### 움직이는 주체가 둘이었다 ★★★★★
+`sync({ shouldRun: true })` 는 **런타임 자율 배회(FSM)** 스위치다. 그리기는 `setRunning(true)` 가 따로 한다.
+켜 두면 런타임이 제멋대로 움직여 우리 A* 결과(`npcState`)와 어긋난다 —
+**화면 속 캐릭터와 대화·목격 판정이 서로 다른 자리**를 보게 된다.
+- 조치: `shouldRun: false`. 움직임은 `findPath/isWalkable` 하나가 맡고 런타임은 그린다.
+- 실측: `npcState` 와 어긋남 **26 → 0**
+
+### 맵
+- 도면 `spum/house.mjs` 는 **32×32** 다. `docs/house_32grid.png` 에 32×32 격자를 얹어 읽은 좌표다
+  (`node spum/refgrid.mjs 32 32 out.png docs/house_32grid.png`). 그림은 **설계도로만** 쓴다.
+- 화면 재료는 전부 SPUM 유니티 번들 타일셋(`spum/spum-tiles/TP_Tile01|03|AniTile01.png`).
+  없는 가구는 있는 재료를 합쳐 만든다 — `spum/materials.mjs`
+- 잔디는 **장식**이라 못 밟는다. 방 바닥·돌길·데크·운동장·텃밭·헛간·문만 걷는다 (`WALKABLE_CH`)
+- 깊이: `OVERHEAD` 물건(나무·차양·선반…)의 윗줄은 **front 레이어**로 가서 캐릭터 위에 그려진다
+
+### 검사 도구
+- `node spum/houseplan.mjs` — 도면. 연결성·문·이름표·겹침. **실패 0**
+- `node spum/verify-map.mjs` — 게임. 가구 위 0 · 길찾기 15/15 · 걸음 252칸 문제 0 · 콘솔 오류 0
+- `node spum/probe-runtime.mjs` — **런타임이 실제로 세우는 칸**을 막힘표와 대조. 여기서 위 두 버그가 잡혔다
+- `REF_PNG=1 node spum/buildtheme.mjs` — 참조 그림을 그대로 깐 판(비교용). 게임에는 안 쓴다
+
 ## 다음 할 일
 1. Step 5 (NPC 기억+소통) → Step 6 (LANDMARKS 연결) → Step 7 (데모 검증)
 

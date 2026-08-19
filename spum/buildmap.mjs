@@ -35,7 +35,8 @@ theme.tiles.forEach((t, i) => {
 
 // ── 레이어 ──────────────────────────────────────────────────
 const back = theme.layer.map(i => BASE + i);        // 집 한 채가 통째로 여기 들어간다
-const front = new Array(W * H).fill(0);
+// front = 캐릭터보다 위에 그려질 칸 (나무 우듬지·차양 …). 0 은 빈 칸이다.
+const front = (theme.layerFront || new Array(W * H).fill(-1)).map(i => i >= 0 ? BASE + i : 0);
 const { walkable, obstacle } = theme;
 
 // ── 방 이름표: 방마다 칸을 큰 사각형으로 쪼개 주석으로 남긴다 ──

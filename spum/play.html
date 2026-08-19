@@ -173,6 +173,7 @@ const CHARACTER_EMOJI = {
 // ── 배경: SPUM 맵을 한 번 구워서 #bg 에 깐다 ────────────────
 // 런타임의 setGrid() 는 길찾기 전용이라 타일을 그리지 않는다.
 // 타일 그림은 SPUM Studio 에서 구운 house-theme.png 에서 그대로 온다.
+let frontLayer = null;                 // 캐릭터보다 위에 그려질 층 (나무 우듬지·차양 …)
 function drawBackground() {
   if (!spumMap) return;
   const cv = $('#bg'); if (!cv) return;
@@ -180,6 +181,7 @@ function drawBackground() {
   g.clearRect(0, 0, cv.width, cv.height);
   const baked = spumMap.bake();
   g.drawImage(baked, 0, 0, baked.width, baked.height, 0, 0, cv.width, cv.height);
+  frontLayer = spumMap.bakeFront();    // 매 프레임 다시 굽지 않게 여기서 한 번만
 }
 
 // SPUM 런타임과 얼굴 굽기가 같은 정의를 본다.
@@ -231,7 +233,7 @@ async function initSPUM() {
   try {
     const worldMod = await import('/spum-cdn/packages/spum-world/runtime/StudioSpumWorldRuntime.js');
     const canvas = $('#scene');
-    spumRuntime = worldMod.createStudioSpumWorldRuntime({
+    window.__spumRuntime = spumRuntime = worldMod.createStudioSpumWorldRuntime({
       canvas,
       log: (level, msg, data) => {
         if (level === 'error' || level === 'warn') console[level]('[SPUM]', level, msg, data || '');
@@ -246,11 +248,13 @@ async function initSPUM() {
   }
 }
 
-// shouldRun: false → 런타임 자체 rAF 안 돌림. 우리가 sync()로만 데이터 갱신.
-// 런타임이 내부적으로 매 프레임 canvas를 clear + redraw.
+// shouldRun 은 **런타임의 자율 배회(FSM)** 스위치다. 그리기는 setRunning(true) 가 따로 맡는다.
+// true 로 두면 런타임이 제 마음대로 움직여서 우리 A* 결과(npcState)와 어긋난다 —
+// 화면 속 캐릭터와 대화·목격 판정이 서로 다른 자리를 보게 된다. 그래서 끈다.
+// 움직임은 우리 A*(findPath/isWalkable) 하나가 맡고, 런타임은 그 자리에 그린다.
 function syncSPUM() {
   if (!spumRuntime || !spumMap) return;
-  const gridData = { width: MW, height: MH, tileSize: TS, grid: spumObstacle, signature: `house-${MW}x${MH}` };
+  const gridData = { width: MW, height: MH, tileSize: TS, grid: spumWalk, signature: spumWalkSig };
   // 플레이어도 SPUM 캐릭터다 — 여섯 다 런타임이 그린다.
   const castEntries = CAST.map(c => {
     const isMe = c.id === PLAYER_ID;
@@ -260,14 +264,14 @@ function syncSPUM() {
   });
   const characterLookup = spumCharacterOf;
   try {
-    spumRuntime.sync({ grid: gridData, cast: castEntries, characterLookup, shouldRun: true, unitScale: UNIT_SCALE });
+    spumRuntime.sync({ grid: gridData, cast: castEntries, characterLookup, shouldRun: false, unitScale: UNIT_SCALE });
   } catch (e) {
     console.warn('[SPUM] sync error:', e.message);
   }
 }
 
 // ── 상태 ────────────────────────────────────────────────────
-let spumMap = null, spumObstacle = null;
+let spumMap = null, spumObstacle = null, spumWalk = null, spumWalkSig = '';
 let world = [], round = null, cur = null, talks = 0, budget = 18;
 const chat = {}, board = {}, topic = {}, discovered = {};
 // SPUM Cast 의 인격(성격·MBTI·말투·내력). NPC 만 갖는다 —
@@ -573,6 +577,8 @@ function drawOverlay() {
   const cv = $('#overlay'); if (!cv) return;
   const cx = cv.getContext('2d'); cx.clearRect(0, 0, cv.width, cv.height);
   cx.imageSmoothingEnabled = false;
+  // ① 머리 위를 덮는 층을 먼저 얹는다 — 캐릭터가 나무·차양 뒤로 들어간다
+  if (frontLayer) cx.drawImage(frontLayer, 0, 0, frontLayer.width, frontLayer.height, 0, 0, cv.width, cv.height);
   cx.font = '800 14px "Pretendard",system-ui'; cx.textAlign = 'center';
   CAST.forEach(c => {
     const s = SPOT[c.id]; if (!s) return;
@@ -918,7 +924,13 @@ async function boot() {
   llmReady = h.sam === 'ready' || h.sam === 'bridge';
   $('#pillLLM').textContent = h.sam === 'ready' ? 'SAM · claude-sonnet-4.6' : (h.sam === 'bridge' ? 'SAM · 로그인 다리' : 'SAM 없음 · 간이모드');
   spumMap = await loadSpumMap('./');
-  spumObstacle = new Uint8Array(spumMap.obstacle);
+  spumObstacle = new Uint8Array(spumMap.obstacle);   // 1 = 막힘 (우리 A* 기준)
+  // ⚠️ SPUM 런타임은 **정반대**다 — `setGrid` 의 기본값이 fill(1) 이고 그게 "다 걸을 수 있다"는 뜻이다.
+  //    그래서 런타임에는 walkable(1 = 걸을 수 있음) 을 준다. 막힘표를 그대로 넘기면
+  //    벽이 길이 되고 바닥이 벽이 되어 캐릭터가 가구 위를 걸어 다닌다.
+  spumWalk = Uint8Array.from(spumObstacle, v => v ? 0 : 1);
+  let sum = 0; for (let i = 0; i < spumWalk.length; i++) if (spumWalk[i]) sum = (sum * 31 + i) >>> 0;
+  spumWalkSig = `house-${spumMap.W}x${spumMap.H}-${sum.toString(36)}`;
   drawBackground();
   await pickPlayer();
   seatCast();
@@ -942,6 +954,9 @@ window.__wamc = {
   get gossip() { return gossipCount; },
   memories, npcState, playerGrid,
   get obstacle() { return spumObstacle; },
+  get runtime() { return spumRuntime; },
+  findPath, isWalkable, startPlayerMove,
+  get landmarks() { return spumMap ? spumMap.landmarks : []; },
   warp(x, y) { playerGrid.x = x; playerGrid.y = y; playerPx.x = x * TS; playerPx.y = y * TS; },
 };
 

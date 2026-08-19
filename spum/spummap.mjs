@@ -52,19 +52,22 @@ export async function loadSpumMap(base = './') {
     landmarks: tagged('landmark').map(s => ({ name: s.name, x: s.x, y: s.y })),
     actors: Object.fromEntries(tagged('actor').map(s => [s.name, { x: s.x, y: s.y, room: s.tags.find(t => t !== 'actor') }])),
 
-    // 집 한 채를 한 번만 그려 둔다 — 타일 시트에서 그대로 오려 붙인다
-    bake() {
+    // 집 한 채를 한 번만 그려 둔다 — 타일 시트에서 그대로 오려 붙인다.
+    // back  = 바닥·벽·가구 (캐릭터보다 아래)
+    // front = 나무 우듬지·차양 (캐릭터보다 **위**) — 깊이감이 여기서 나온다
+    bakeLayer(which) {
+      const data = which === 'front' ? front : back;
       const cv = document.createElement('canvas');
       cv.width = W * TS; cv.height = H * TS;
       const g = cv.getContext('2d'); g.imageSmoothingEnabled = false;
-      for (const data of [back, front]) {
-        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-          const c = cellOf(data[y * W + x]); if (!c) continue;
-          g.drawImage(sheet, c.cx * TS, c.cy * TS, TS, TS, x * TS, y * TS, TS, TS);
-        }
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const c = cellOf(data[y * W + x]); if (!c) continue;
+        g.drawImage(sheet, c.cx * TS, c.cy * TS, TS, TS, x * TS, y * TS, TS, TS);
       }
       return cv;
     },
+    bake() { return api.bakeLayer('back'); },
+    bakeFront() { return api.bakeLayer('front'); },
   };
   return api;
 }

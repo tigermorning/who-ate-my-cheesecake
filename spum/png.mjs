@@ -75,9 +75,11 @@ export function decodePNG(buf) {
     else if (tag === 'IEND') break;
     o += 12 + len;
   }
-  if (depth !== 8 || type !== 6) throw new Error(`8bit RGBA 만 읽는다 (depth ${depth}, type ${type})`);
+  if (depth !== 8 || (type !== 6 && type !== 2))
+    throw new Error(`8bit RGB/RGBA 만 읽는다 (depth ${depth}, type ${type})`);
+  const chan = type === 6 ? 4 : 3;                 // 2 = RGB(알파 없음)
   const raw = inflateSync(Buffer.concat(idat));
-  const bpp = 4, stride = w * bpp;
+  const bpp = chan, stride = w * bpp;
   const px = new Uint8Array(w * h * 4);
   let prev = new Uint8Array(stride);
   for (let y = 0; y < h; y++) {
@@ -96,7 +98,11 @@ export function decodePNG(buf) {
       }
       cur[i] = v & 255;
     }
-    px.set(cur, y * stride);
+    if (chan === 4) px.set(cur, y * stride);
+    else for (let x = 0; x < w; x++) {
+      const d = (y * w + x) * 4;
+      px[d] = cur[x * 3]; px[d + 1] = cur[x * 3 + 1]; px[d + 2] = cur[x * 3 + 2]; px[d + 3] = 255;
+    }
     prev = cur;
   }
   return { w, h, px };

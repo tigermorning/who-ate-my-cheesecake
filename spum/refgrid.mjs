@@ -2,15 +2,15 @@
 //   node spum/refgrid.mjs <cols> <rows> [out] [x0 y0 x1 y1]
 import { chromium } from 'playwright';
 import fs from 'node:fs';
-const [C = 48, R = 48, out = 'docs/ref-grid.png', ...crop] = process.argv.slice(2);
-const b64 = fs.readFileSync('docs/reference-house.png').toString('base64');
+const [C = 32, R = 32, out = 'docs/ref-grid.png', src = 'docs/house_32grid.png', ...crop] = process.argv.slice(2);
+const b64 = fs.readFileSync(src).toString('base64');
 const br = await chromium.launch();
 const p = await br.newPage();
 const data = await p.evaluate(async (a) => {
   const img = new Image(); img.src = 'data:image/png;base64,' + a.b64; await img.decode();
   const [sx, sy, sw, sh] = a.crop.length === 4 ? a.crop.map(Number) : [0, 0, img.width, img.height];
   const cell = img.width / a.C;                    // 원본 기준 한 칸
-  const S = Math.min(3, 1900 / sw);
+  const S = Math.min(4, 1900 / sw);
   const c = document.createElement('canvas');
   c.width = Math.round(sw * S); c.height = Math.round(sh * S);
   const g = c.getContext('2d');
