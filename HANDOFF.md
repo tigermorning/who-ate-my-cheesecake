@@ -16,6 +16,15 @@
 - 방 이름이 바뀌었으므로 `round.mjs` 의 `ROOMS`, `premise.json`, `cast.json` 도 같이 고쳤다.
   판 엔진 4,000판 불변식 실패 0 (`node spum/roundtest.mjs`).
 
+## SPUM Studio 올리기 — 알아낸 것과 남은 것
+- **맵은 라이브러리 SMO 를 못 그린다.** `map.tilesets[]` 에 map-theme 으로 등록된 타일만 그린다.
+  `map.objects[]` 는 사각형 주석이라 SMO 배치와 무관하다. 자세한 건 `docs/house.md` 맨 끝.
+- 그래서 `spum/buildtheme.mjs` 로 집을 테마 시트 한 장(227타일, 512×480)으로 구웠다.
+  시트만으로 집이 픽셀까지 복원되는 것을 확인했다.
+- Studio 쪽 남은 일: 테마 넣기 → 맵 만들고 테마 고르기 → 레이어 채우기 → `saveServerSnapshot`.
+- 옛 `SMO_SGN_*` 11개와 옛 맵 2개(`맵 1`, `치즈케이크의 밤 · 성`)는 지우기로 했다. 아직 안 지웠다.
+- `serve.mjs` 정적 파일에 CORS 를 열었다. 로그인된 Studio 탭이 `http://127.0.0.1:8790/spum/*.json` 을 직접 가져간다.
+
 ## 다음 할 일
 - 하웰·벤·도른의 SPUM 스프라이트 색을 밝게 다시 뽑는다 (Studio Cast → AI 로 색 지정 → Export → `spum/sprites/`).
 - 사람이 가구 뒤로 지나가도 앞에 그려진다. 사람도 Y 정렬에 넣을지 정한다.

@@ -139,6 +139,9 @@ const server = http.createServer(async (req, res) => {
   }
 
   // ── 정적 파일 ─────────────────────────────────────────────
+  // 어디서 부르든 읽을 수 있게 열어 둔다. 로그인된 SPUM 탭이 여기서
+  // smo.json · house-map.json 을 가져가 Studio 에 올린다.
+  res.setHeader('Access-Control-Allow-Origin', '*');
   let p = path.join(ROOT, decodeURIComponent(url.pathname));
   if (url.pathname === '/') p = path.join(ROOT, 'spum', 'play.html');
   if (!p.startsWith(ROOT) || /(^|[\\/])\.env/.test(p)) { res.writeHead(403); return res.end('no'); }
