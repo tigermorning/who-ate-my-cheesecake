@@ -228,14 +228,16 @@ function normalizeSamBody(raw) {
       if (p2.startsWith(ROOT) && !(/(^|[\\/])\.env/.test(p2))) {
         fs.readFile(p2, (err2, data2) => {
           if (err2) { res.writeHead(404); return res.end('not found'); }
-          res.writeHead(200, { 'Content-Type': MIME[path.extname(p2)] || 'application/octet-stream' });
+          res.writeHead(200, { 'Content-Type': MIME[path.extname(p2)] || 'application/octet-stream', 'Cache-Control': 'no-store' });
           res.end(data2);
         });
         return;
       }
       res.writeHead(404); return res.end('not found');
     }
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(p)] || 'application/octet-stream' });
+    // no-store — 맵/도면을 다시 구운 뒤에도 브라우저가 옛 판을 붙들고 있으면
+    // "아직도 벽을 통과한다"로 보인다. 개발용 서버라 캐시할 이유가 없다.
+    res.writeHead(200, { 'Content-Type': MIME[path.extname(p)] || 'application/octet-stream', 'Cache-Control': 'no-store' });
     res.end(data);
   });
 });
