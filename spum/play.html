@@ -118,8 +118,8 @@ dialog::backdrop{background:rgba(60,40,25,.45)}
 <script type="module">
 import { makeRound, knowledgeOf, nameOf, ROOMS, HOURS, CAST } from './round.mjs';
 import { buildMessages, violations, classifyIntent, MODEL } from './dialogue.mjs';
-import { W as HW, H as HH, PATCH, RUGS, DECOR, PROPS, SPOT, ZONES,
-         roomOf, floorOf, isDoor, isWall, buildBlocked } from './house.mjs';
+import { W as HW, H as HH, PATCH, RUGS, PROPS, ONWALL, SPOT, ZONES, PASSABLE,
+         roomOf, floorOf, isDoor, isWall, isFence, sizeOf, buildBlocked } from './house.mjs';
 
 const $ = s => document.querySelector(s);
 const el = (t, c, x) => { const e = document.createElement(t); if (c) e.className = c; if (x != null) e.textContent = x; return e; };
@@ -127,21 +127,9 @@ const el = (t, c, x) => { const e = document.createElement(t); if (c) e.classNam
 const SPRITE = { sgn_kyle: '카일', sgn_mira: '미라', sgn_dorn: '도른', sgn_howell: '하웰', sgn_ben: '벤' };
 
 // ── 집 그리기 재료 ──────────────────────────────────────────
-// 타일시트는 16×16 칸(한 칸 64px). 좌표는 눈으로 골랐다.
-const T = {
-  woodFloor: [[6,0],[6,1]], stoneFloor: [[1,4],[2,4],[0,4]], rug: [[9,4],[9,7],[5,6]],
-  grass: [[0,7],[1,7],[2,7],[3,7]], grassFlower: [[0,8],[1,8],[4,7],[2,8]],
-  water: [[1,5],[2,5],[3,5],[4,5]],
-  wall: [[5,0],[5,1],[5,2],[3,1]], wallTop: [[4,4],[5,4]],
-  door: [[3,4],[6,7],[10,5],[11,3]],
-  hearthTop: [6,5], hearthFire: [6,6],
-  tableL: [10,1], tableM: [11,1], tableR: [12,1],
-  tableL2: [10,2], tableM2: [11,2], tableR2: [12,2],
-  shelfJar: [[5,11],[6,11]], shelfJar2: [[5,12],[6,12]],
-  barrel: [[7,0],[0,9],[15,8]], sack: [[0,10],[9,14],[15,7]],
-  ladder: [[0,5],[14,6]], tree: [[4,1],[7,7],[11,13]], chair: [[1,2],[13,13],[2,1]],
-  banner: [[3,0],[12,0],[9,5]], window: [[2,0],[7,5],[13,1]], bookshelf: [[0,0],[0,1],[0,14]],
-};
+// 바닥·벽·가구 전부 SPUM 오브젝트(smo.json)다. 타일시트는 쓰지 않는다.
+const smoImg = {};       // key → 캔버스 (그림 한 칸 16px)
+let mapLayer = null;     // 미리 그려 둔 집 — 사람만 그 위에 얹는다
 const sheets = {};       // id → {img, cols, fw, fh, frames}
 let world = [], round = null, cur = null, talks = 0, budget = 18;
 const SCALE = {};   // 종마다 덩치가 다르다 — 곰은 크고 다람쥐는 작다
@@ -160,17 +148,19 @@ async function boot() {
   const h = await fetch('/api/health').then(r => r.json()).catch(() => ({ sam: 'missing' }));
   llmReady = h.sam === 'ready' || h.sam === 'bridge';
   $('#pillLLM').textContent = h.sam === 'ready' ? 'SAM · claude-sonnet-4.6' : (h.sam === 'bridge' ? 'SAM · 로그인 다리' : 'SAM 없음 · 간이모드');
-  // 집 타일과 이야기 소품
-  sheet = new Image(); sheet.src = './tilesheet.png'; await sheet.decode().catch(() => {});
+  // 집을 이루는 SPUM 오브젝트를 전부 그림으로 만든다
   const smo = await (await fetch('./smo.json')).json();
-  for (const p of PROPS) {
-    const s = smo.find(o => o.key === p.key); if (!s) continue;
-    const c = document.createElement('canvas'); c.width = 16; c.height = 16;
+  for (const o of smo) {
+    const { width: w, height: h, pixels } = o.visual;
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
     const g = c.getContext('2d');
-    s.visual.pixels.forEach((hex, i) => { if (!hex) return; g.fillStyle = hex; g.fillRect(i % 16, Math.floor(i / 16), 1, 1); });
-    const im = new Image(); im.src = c.toDataURL(); await im.decode().catch(() => {});
-    propImgs[p.key] = im;
+    for (let i = 0; i < pixels.length; i++) {
+      const hex = pixels[i]; if (!hex) continue;
+      g.fillStyle = hex; g.fillRect(i % w, (i / w) | 0, 1, 1);
+    }
+    smoImg[o.key] = c;
   }
+  mapLayer = buildMapLayer();
   $('#scene').addEventListener('click', sceneClick);
   await Promise.all(Object.entries(SPRITE).map(async ([id, ko]) => {
     const meta = await (await fetch(`./sprites/${ko}-idle-sheet.json`)).json();
@@ -325,8 +315,8 @@ function drawSpecies(cx, id, x, y, w, h) {
 }
 
 // ── 집 그리기 ───────────────────────────────────────────────
-const TS = 24, MW = HW, MH = HH;      // 화면 한 칸 24px
-let sheet = null, propImgs = {}, blocked = null, bubbles = {};
+const TS = 24, TP = 16, MW = HW, MH = HH;   // 화면 한 칸 24px · 그림 한 칸 16px
+let blocked = null, bubbles = {};
 // ── 이동 시스템 ──────────────────────────────────────────────
 const playerGrid = { ...SPOT.player };
 const playerPx   = { x: SPOT.player.x * TS, y: SPOT.player.y * TS };
@@ -458,50 +448,65 @@ function updateNPCs(dt) {
   }
 }
 
-const pick = (arr, x, y) => arr[(x * 7 + y * 13) % arr.length];
-function tileAt(name, x, y) { const v = T[name]; return Array.isArray(v[0]) ? pick(v, x, y) : v; }
-function blit(cx, cell, dx, dy, dw = TS, dh = TS) {
-  if (!sheet) return;
-  const S = sheet.width / 16;
-  cx.drawImage(sheet, cell[0] * S, cell[1] * S, S, S, dx, dy, dw, dh);
-}
-function drawScene() {
-  const cv = $('#scene'); if (!cv || !sheet) return;
-  const cx = cv.getContext('2d'); cx.imageSmoothingEnabled = false;
-  cx.fillStyle = '#241B15'; cx.fillRect(0, 0, cv.width, cv.height);
-  blocked ||= buildBlocked();
-  const inBox = (x, y) => ([x1, y1, x2, y2]) => x >= x1 && x <= x2 && y >= y1 && y <= y2;
-  // 바닥 · 벽 · 뜰 — 도면 글자가 곧 바닥 재료다
+const inBox = (x, y) => ([x1, y1, x2, y2]) => x >= x1 && x <= x2 && y >= y1 && y <= y2;
+
+// 집은 판마다 바뀌지 않는다 — 한 번만 그려 두고 매 판 그대로 얹는다.
+function buildMapLayer() {
+  const cv = document.createElement('canvas');
+  cv.width = MW * TP; cv.height = MH * TP;
+  const g = cv.getContext('2d'); g.imageSmoothingEnabled = false;
+  const stamp = (key, x, y) => { const im = smoImg[key]; if (im) g.drawImage(im, x * TP, y * TP); };
+
+  // 바닥 · 깔개
   for (let y = 0; y < MH; y++) for (let x = 0; x < MW; x++) {
-    const dx = x * TS, dy = y * TS;
-    if (isWall(x, y)) {
-      blit(cx, tileAt('wall', x, y), dx, dy);
-      cx.fillStyle = 'rgba(34,20,12,.46)'; cx.fillRect(dx, dy, TS, TS);
-      continue;
-    }
     const pt = PATCH.find(inBox(x, y));
-    blit(cx, tileAt(pt ? pt[4] : floorOf(x, y), x, y), dx, dy);
-    if (RUGS.some(inBox(x, y)) && roomOf(x, y)) blit(cx, tileAt('rug', x, y), dx, dy);
-    if (roomOf(x, y) === '화원') {                       // 유리 지붕이 한 겹 얹힌다
-      cx.fillStyle = 'rgba(170,214,238,.15)'; cx.fillRect(dx, dy, TS, TS);
-      if (x % 3 === 0) { cx.fillStyle = 'rgba(255,255,255,.16)'; cx.fillRect(dx, dy, 2, TS); }
-    }
-    if (isDoor(x, y)) blit(cx, tileAt('door', x, y), dx, dy);
+    stamp(pt ? pt[4] : floorOf(x, y), x, y);
+    const rug = RUGS.find(inBox(x, y));
+    if (rug) stamp(rug[4], x, y);
   }
-  // 소품 — Y 순서대로 그린다 (3/4 전방향 깊이)
-  const _items = [
-    ...DECOR.map(([k, x, y]) => ({ y, draw() { blit(cx, tileAt(k, x, y), x * TS, y * TS); } })),
-    ...PROPS.map(p => ({ y: p.y, draw() { const im = propImgs[p.key]; if (im) cx.drawImage(im, p.x * TS, p.y * TS, (p.w || 1) * TS, (p.h || 1) * TS); } })),
-  ];
-  _items.sort((a, b) => a.y - b.y);
-  _items.forEach(it => it.draw());
-  // 자리 이름 — 방 다섯 안의 구역까지 보여 준다
-  cx.font = '800 15px "Pretendard",system-ui'; cx.textAlign = 'center';
+  g.strokeStyle = 'rgba(122,106,78,.65)'; g.lineWidth = 2;
+  RUGS.forEach(([x1, y1, x2, y2]) =>
+    g.strokeRect(x1 * TP + 1, y1 * TP + 1, (x2 - x1 + 1) * TP - 2, (y2 - y1 + 1) * TP - 2));
+
+  // 벽 · 울타리 · 문
+  for (let y = 0; y < MH; y++) for (let x = 0; x < MW; x++) {
+    if (isWall(x, y)) stamp(isFence(x, y) ? 'fence' : 'house_wall', x, y);
+    else if (isDoor(x, y)) stamp('wooden_door', x, y);
+  }
+  // 벽 밑에 지는 그림자 — 빛은 늘 위에서 온다
+  g.fillStyle = 'rgba(58,42,28,.16)';
+  for (let y = 0; y < MH; y++) for (let x = 0; x < MW; x++)
+    if (isWall(x, y - 1) && !isWall(x, y) && !isDoor(x, y)) g.fillRect(x * TP, y * TP, TP, 3);
+
+  // 놓인 것 — 아래쪽에 있는 것을 나중에 그린다 (Y 정렬, 3/4 깊이)
+  const items = [...PROPS, ...ONWALL].map(p => {
+    const [cw, ch] = sizeOf(p.key);
+    return { ...p, cw, ch, sort: p.y + ch - 1 + (p.on ? 0.5 : 0) };
+  }).sort((a, b) => a.sort - b.sort);
+  items.forEach(p => {
+    if (!p.on && !PASSABLE.has(p.key)) {
+      g.fillStyle = 'rgba(58,42,28,.20)';
+      g.fillRect(p.x * TP + 1, (p.y + p.ch) * TP - 2, p.cw * TP - 2, 4);
+    }
+    stamp(p.key, p.x, p.y);
+  });
+  return cv;
+}
+
+function drawScene() {
+  const cv = $('#scene'); if (!cv || !mapLayer) return;
+  const cx = cv.getContext('2d'); cx.imageSmoothingEnabled = false;
+  blocked ||= buildBlocked();
+  cx.drawImage(mapLayer, 0, 0, cv.width, cv.height);
+
+  // 자리 이름 — 어디가 어디인지 한눈에
+  cx.font = '800 14px "Pretendard",system-ui'; cx.textAlign = 'center';
   ZONES.forEach(z => {
     const lx = z.x * TS + TS / 2, ly = z.y * TS + TS / 2;
-    const w = cx.measureText(z.name).width + 20;
-    cx.fillStyle = 'rgba(40,26,18,.55)'; cx.fillRect(lx - w / 2, ly - 13, w, 21);
-    cx.fillStyle = '#FFE9C9'; cx.fillText(z.name, lx, ly + 2);
+    const w = cx.measureText(z.name).width + 18;
+    cx.fillStyle = 'rgba(40,26,18,.42)';
+    cx.beginPath(); cx.roundRect(lx - w / 2, ly - 12, w, 20, 8); cx.fill();
+    cx.fillStyle = '#FFEFD6'; cx.fillText(z.name, lx, ly + 2);
   });
   // 인물
   CAST.forEach(c => {

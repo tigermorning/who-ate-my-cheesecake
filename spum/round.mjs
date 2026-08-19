@@ -1,7 +1,8 @@
 // Who Ate My Cheesecake? — round generator
 // 사실은 여기서만 만들어진다. LLM 은 여기서 승인한 것만 말할 수 있다.
 
-export const ROOMS = ['부엌', '거실', '화원', '서재', '침실'];
+// 어젯밤 사람이 있을 수 있던 자리. 집 도면(house.mjs)의 방 이름과 글자 하나까지 같아야 한다.
+export const ROOMS = ['부엌', '식당', '거실', '서재', '데크', '운동장', '텃밭', '헛간'];
 export const HOURS = ['21시', '22시', '23시', '00시', '01시', '02시'];
 export const CAST = [
   { id: 'sgn_kyle',   name: '카일', species: '호랑이' },
