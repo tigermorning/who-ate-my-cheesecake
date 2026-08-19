@@ -32,9 +32,11 @@ header.top{display:flex;align-items:center;gap:14px;margin-bottom:14px}
 .who .avatar{width:56px;height:56px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:28px;flex:0 0 auto}
 .who b{display:block;font-size:15px}
 .who span{font-size:12px;color:var(--ink-soft)}
-.stage{width:1280px;max-width:100%;margin:0 auto;border-radius:14px;border:1.5px solid var(--line);overflow:hidden;position:relative;background:#2A1F18;line-height:0}
-#scene{width:100%;height:auto;image-rendering:pixelated;cursor:pointer;display:block}
-#bg,#overlay{image-rendering:pixelated}
+.stage{width:1408px;max-width:100%;margin:0 auto;border-radius:14px;border:1.5px solid var(--line);overflow:hidden;position:relative;background:#2A1F18;line-height:0}
+#bg{position:relative;display:block;width:100%;height:auto;image-rendering:pixelated;z-index:0}
+#scene,#overlay{position:absolute;top:0;left:0;width:100%;height:100%;image-rendering:pixelated}
+#scene{cursor:pointer;z-index:1}
+#overlay{z-index:2;pointer-events:none}
 .roomtag{position:absolute;left:12px;top:10px;font-size:12px;font-weight:800;color:#fff;
   background:rgba(50,34,22,.62);padding:4px 10px;border-radius:999px;line-height:1.4}
 .log{height:260px;overflow:auto;padding:6px 2px;display:flex;flex-direction:column;gap:10px;margin-top:10px}
@@ -84,9 +86,9 @@ dialog::backdrop{background:rgba(60,40,25,.45)}
 
   <section class="card" style="padding:8px;margin-bottom:14px">
     <div class="stage" id="stage" style="position:relative">
-      <canvas id="bg" width="1280" height="960" style="position:absolute;top:0;left:0;z-index:0"></canvas>
-      <canvas id="scene" width="1280" height="960" style="position:relative;z-index:1"></canvas>
-      <canvas id="overlay" width="1280" height="960" style="position:absolute;top:0;left:0;z-index:2;pointer-events:none"></canvas>
+      <canvas id="bg" width="1408" height="1152"></canvas>
+      <canvas id="scene" width="1408" height="1152"></canvas>
+      <canvas id="overlay" width="1408" height="1152"></canvas>
       <div class="roomtag" id="roomtag"></div>
     </div>
   </section>
@@ -531,13 +533,6 @@ function drawOverlay() {
   const cx = cv.getContext('2d'); cx.clearRect(0, 0, cv.width, cv.height);
   cx.imageSmoothingEnabled = false;
   cx.font = '800 14px "Pretendard",system-ui'; cx.textAlign = 'center';
-  ZONES.forEach(z => {
-    const lx = z.x * TS + TS / 2, ly = z.y * TS + TS / 2;
-    const w = cx.measureText(z.name).width + 18;
-    cx.fillStyle = 'rgba(40,26,18,.42)';
-    cx.beginPath(); cx.roundRect(lx - w / 2, ly - 12, w, 20, 8); cx.fill();
-    cx.fillStyle = '#FFEFD6'; cx.fillText(z.name, lx, ly + 2);
-  });
   CAST.forEach(c => {
     const s = SPOT[c.id]; if (!s) return;
     const isMe = c.id === PLAYER_ID;
@@ -845,7 +840,7 @@ async function boot() {
   seatCast();
   await initSPUM();
   if (spumReady) {
-    spumRuntime.setViewport({ cssWidth: 1280, cssHeight: 960, dpr: 1 });
+    spumRuntime.setViewport({ cssWidth: 1408, cssHeight: 1152, dpr: 1 });
     spumRuntime.setRunning(true);
     // 첫 sync — 맵+캐릭터 데이터 전달. 런타임이 자체 rAF로 렌더링 시작.
     syncSPUM();

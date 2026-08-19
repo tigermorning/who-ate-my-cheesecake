@@ -587,12 +587,33 @@ F('plant_pot', '화분', 1, 1, { cat: 'nature', block: false, prompt: '화분을
   c.rect(3, 9, 11, 2, K.redT);
 });
 
+// ── 키우기 ──────────────────────────────────────────────────
+// 참조 그림(docs/reference-house.png)에서 이 가구들이 차지하는 비중에 맞춘다.
+// 원래 그림을 최근접으로 늘린다 — 픽셀아트라 결이 유지된다.
+const GROW = {
+  fridge: [3, 4], stove: [3, 2], sink_counter: [3, 1], counter: [3, 1], kitchen_island: [5, 3],
+  cupboard: [3, 2], dining_table: [7, 5], hearth: [5, 3], sofa_long: [6, 2], sofa_side: [2, 5],
+  coffee_table: [4, 2], shelf: [3, 1], bookshelf_large: [3, 2], desk: [5, 3], bathtub: [4, 2],
+  patio_set: [5, 5], exercise_mat: [5, 3], weight_bench: [4, 2], gym_machine: [3, 4],
+  veg_bed: [4, 3], tree: [3, 3],
+};
+
 // ── 뽑기 ────────────────────────────────────────────────────
 const now = new Date().toISOString();
 const out = Object.entries(ART).map(([key, a]) => {
-  const cols = a.cols || 1, rows = a.rows || 1;
-  const c = canvas(cols, rows);
+  let cols = a.cols || 1, rows = a.rows || 1;
+  let c = canvas(cols, rows);
   a.draw(c);
+  if (GROW[key]) {
+    const [c2, r2] = GROW[key];
+    const src = c, dst = canvas(c2, r2);
+    for (let y = 0; y < dst.h; y++) for (let x = 0; x < dst.w; x++) {
+      const sx = Math.min(src.w - 1, Math.floor(x * src.w / dst.w));
+      const sy = Math.min(src.h - 1, Math.floor(y * src.h / dst.h));
+      dst.g[y][x] = src.g[sy][sx];
+    }
+    c = dst; cols = c2; rows = r2;
+  }
   const pixels = [];
   for (let y = 0; y < c.h; y++) for (let x = 0; x < c.w; x++) {
     const v = c.g[y][x];
