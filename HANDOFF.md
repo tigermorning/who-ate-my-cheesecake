@@ -1,8 +1,13 @@
 # HANDOFF
 
+> 최종 갱신: 2026-08-19 13:45 (Claude Code). 직전 작업은 **OpenCode** 세션이었고 13:39 에 끊겼다.
+
 ## 현재 상태
-《Who Ate My Cheesecake?》 — 동물 하우스메이트 추리 게임. `spum/` 에서 플레이.
-`node spum/serve.mjs` → http://127.0.0.1:8790/spum/play.html (SAM 키는 `.env`)
+《Who Ate My Cheesecake?》 — 하우스메이트 추리 게임. `spum/` 에서 플레이.
+`node spum/serve.mjs` → http://127.0.0.1:8790/spum/play.html (SAM 키는 `.env` 의 `SPUM_KEY`/SAM 키)
+
+**게임 목적은 SPUM 엔진 + SAM 마케팅 데모다.** 캐릭터 움직임과 대화가 전부 SPUM/SAM 안에서
+나와야 한다. JS 로 직접 그리거나 움직이는 백업 경로는 걷어내는 방향으로 간다.
 
 ## 완료 (Step 1~4)
 - **Step 1**: 플레이어 이동 — WASD/화살표, A*, 클릭 이동
@@ -10,43 +15,80 @@
 - **Step 3**: NPC 루틴 — 방 간 이동/스케줄, 게임 시계 (21시~02시, 45초 간격)
 - **Step 4**: NPC 상호작용 — 근접 감지(2칸), E키 대화, NPC 간 정보 공유
 
-## 캐스트 (6종 — SPUM 헬멧)
-| ID | 이름 | 종 | 헬멧 | body |
-|---|---|---|---|---|
-| sgn_deer | 사슴 | 사슴 | elf_helmet_06 | elf_1 |
-| sgn_horse | 적토마 | 말 | elf_helmet_12 | human_1 |
-| sgn_penguin | 펭귄 | 펭귄 | elf_helmet_17 | elf_1 |
-| sgn_rabbit | 토끼 | 토끼 | legacy_f_sr_helmet | human_4 |
-| sgn_chestnut | 밤톨이 | 곰 | legacy_helmet_1 | human_3 |
-| sgn_bull | 황소 | 황소 | legacy_helmet_6 | human_2 |
+## 캐스트 — **전면 교체됨** (6종)
+동물/헬멧 콘셉트는 **폐기**했다. 08-19 13:05~13:08 에 "제약 없음, 밝고 귀여운 6종"으로 새로 만들었다.
+정본은 `spum/cast.json`. 아래 표는 요약이고, 장비/색 값은 파일을 봐라.
+
+| ID | 이름 | 성격 | 직업 | body | helmet |
+|---|---|---|---|---|---|
+| sgn_haru | 하루 | 밝음·다정·덜렁 | 베이커 | legacy_body_human_1 | modernpackver1_hoodie |
+| sgn_mina | 미나 | 조용·사려깊음 | 시인 | legacy_body_human_4 | elf_helmet_17 |
+| sgn_coco | 코코 | 장난·활발 | 정원사 | legacy_body_human_2 | legacy_helmet_1 |
+| sgn_lulu | 루루 | 나른·몽상 | 화가 | legacy_body_elf_1 | elf_helmet_06 |
+| sgn_peach | 피치 | 명랑·음악 | 음악가 | legacy_body_human_3 | elf_helmet_12 |
+| sgn_ruby | 루비 | 도도·정확 | 요리사 | legacy_body_human_1 | elf_helmet_12 |
+
+⚠️ 옛 캐스트(사슴/적토마/펭귄/토끼/밤톨이/황소)는 죽었다. 그 이름의 스프라이트 시트
+(`spum/sprites/*-idle-sheet.*`) 10개는 삭제됐고, 그래서 예전 play.html 이 404 를 냈다.
 
 ## SPUM 엔진 조사
-- **SPUM은 웹엔진** (공식: "SPUM 웹엔진")
+- **SPUM 은 웹엔진** (공식: "SPUM 웹엔진"). 에셋 팩이 아니다.
 - 코어: Engine, Scene, Camera, Animator, Collider, PathfindingManager, NavAgent, TileMap, Character, ResourceLoader
 - 월드: StudioSpumWorldRuntime, WorldRuntimeBridge, WorldClock, WorldSpeechDirector
 - 내장 이동: QueuedPathfindingManager, moveToTile, wander, rest, sleep
-- SPKG = 암호화 바이너리 (SPUM_SECURE_DEV1)
-- npm/CDN 없음, ES 모듈만 spum.soonsoon.ai
-- 570+ JS 파일 (의존성 트리 깊음)
+- SPKG = 암호화 바이너리 (`SPUM_SECURE_DEV1`) → 스프라이트 직접 접근 불가
+- npm/CDN 패키지 없음, ES 모듈만 `spum.soonsoon.ai` — 570+ JS 파일, 로컬 번들링 어렵다
+- Studio 캐릭터 색은 Cast AI 를 거쳐야 저장이 붙는다
+
+## 렌더링 구조 (13:35 결정 → 13:37 반영)
+**SPUM 런타임이 맵 + 캐릭터를 전부 그린다.** 우리 코드는 UI 만 별도 캔버스에 얹는다.
+- `#scene` (play.html:83) — SPUM 런타임 전용. `createStudioSpumWorldRuntime({canvas})`
+- `#overlay` (play.html:84) — 이름표/말풍선/방 태그만. `drawOverlay()` (play.html:406)
+- `spumRuntime.sync({ grid, cast, characterLookup, shouldRun: true, unitScale: 1 })` (play.html:193)
+  — `shouldRun: true` 로 바꿔서 런타임이 자체 rAF 를 돌린다
+- 런타임 없이 맵을 그리던 백업 경로와 `TP` 상수는 **제거했다**
+
+## 직전 세션이 멈춘 지점 (OpenCode, 08-19 13:39)
+1. 위 렌더링 개편을 `play.html` 에 반영 완료
+2. `node serve.mjs` 재시작 → 8790 포트 선점 → 기존 프로세스 죽이고 재실행 → 서버는 떴다
+3. 그런데 **에이전트 셸의 10초 타임아웃이 서버 프로세스를 같이 죽였다**
+4. 브라우저에서 `GET /api/bridge/pull` → `ERR_CONNECTION_REFUSED`
+5. health check 재시도 실패. 여기서 세션 종료.
+
+**교훈: `serve.mjs` 는 반드시 백그라운드로 띄운다.** 포그라운드로 띄우면 셸 타임아웃에 같이 죽는다.
 
 ## 다음 할 일
-1. **SPUM 엔진 전체 런타임 통합** — createStudioSpumWorldRuntime()으로 교체
-2. SPKG 분석 (암호화 해제 또는 런타임 getAllItems() 추출)
-3. SAM 대화 → SPUM WorldLLMConversation 연결
+1. **캐릭터 6종 주입 확인** — `node spum/check-characters.mjs` (Windows node 로 실행)
+2. Cast Export / 서버 저장 — `window.spumStudioData.saveServerSnapshot('manual')`
+3. play.html 에서 SPUM 런타임 캐릭터 렌더링 확인
+4. Step 5 (NPC 기억+소통) → Step 6 (LANDMARKS 연결) → Step 7 (데모 검증)
 
-## 막힌 것
+## 막힌 것 / 주의
 - SPKG 암호화 → 스프라이트 직접 접근 불가
 - SPUM 의존성 570+ → 로컬 번들링 어려움
-- Studio 캐릭터 색은 반드시 Cast AI로 바꿔야 저장
+- **Playwright 는 Windows node 로 돌려야 한다.** 프로필이 `%TEMP%\spum-chrome-profile`
+  (= `C:\Users\user\AppData\Local\Temp\spum-chrome-profile`) 에 있고 여기에 SPUM 로그인이 붙어 있다.
+  WSL node 로 돌리면 `/tmp/spum-chrome-profile` 을 보게 되어 로그인이 없다.
+- `cast.json` 오염 2건: `sgn_coco` 배경에 중국어 `好奇心`, `sgn_peach` 성격에 `"_social"`.
+  SAM 프롬프트로 나가기 전에 고칠 것.
+- SPUM 대시보드에 Unity 패키지 다운로드가 있다 (`https://spum.soonsoon.ai/dashboard.html#dashboard-packages`).
+  아직 안 써봤다.
 
 ## 핵심 파일
-- `spum/play.html` — 메인 게임 (Step 1~4)
+- `CLAUDE.md` — **SPUM Studio + SAM 작업 가이드 (팀 공용, 263줄).** 작업 전에 읽어라. 신뢰도 별표 표기 있음
+- `spum/play.html` — 메인 게임 (Step 1~4 + SPUM 런타임 렌더링)
+- `spum/serve.mjs` — 정적 서버 + SAM 프록시 + 브라우저 다리 (`/api/bridge/pull|push`, `/bridge.js`), 포트 8790
+- `spum/inject-characters.mjs` — Playwright 로 Studio `sv_studio_characters_v1` 에 캐스트 주입
+- `spum/check-characters.mjs` — 주입 결과 확인 + 스크린샷 (`spum/screenshots/`)
 - `spum/spummap.mjs` — SPUM 맵 로더
 - `spum/house-map.json` — SPUM Studio 맵 (40x30, 4 레이어)
-- `spum/house-theme.json` — 227타일 테마
-- `spum/house-theme.png` — 베이크된 테마 시트
+- `spum/house-theme.json` / `.png` — 227타일 테마 + 베이크된 시트
 - `spum/house.mjs` — 블루프린트 GRID, SPOT, ZONES
-- `spum/cast.json` — 6 NPC 정의
+- `spum/cast.json` — 6 NPC 정의 (정본)
 - `spum/round.mjs` — 라운드 로직
 - `spum/dialogue.mjs` — SAM LLM 통합
-- `spum/sprites/` — 캐릭터 스프라이트 시트
+- `spum/characters-backup.json` — 주입 직전 Studio localStorage 백업
+
+## 직전 세션 기록 위치
+OpenCode DB: `C:\Users\user\.local\share\opencode\opencode.db`
+세션 `ses_fe87beea1ffemHKmQU2eSwt39H` (「SPUM 맵 읽기와 SAM 대화 유지 작업」, 08-19 09:55~13:39, 메시지 551개)
