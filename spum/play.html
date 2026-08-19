@@ -678,32 +678,51 @@ function record(aboutId, hour, room, kind, by) {
   if (by && by !== 'player') (discovered[cur] ||= new Set()).add(hour + '|' + room);
   renderBoard();
 }
-function harvest(speaker, text) {
+// 대화에서 「누가 · 몇 시에 · 어디」를 뽑아 증언판에 올린다.
+// 문장 단위로 보고, 방과 가장 가까운 시각을 짝짓는다.
+// 시각을 빼먹은 답("텃밭에 있었어")은 직전 화제의 시각으로 잇는다.
+function harvest(speaker, text, askedHour = null) {
   const t = topic[speaker] || {};
-  HOURS.forEach(h => {
-    if (!text.includes(h)) return;
-    const seg = text.split(h)[1]?.slice(0, 30) || '';
-    ROOMS.forEach(r => {
-      if (!seg.includes(r) && !text.includes(h + '에 ' + r)) return;
-      const other = CAST.find(c => c.id !== speaker && seg.includes(c.name));
-      if (other) { record(other.id, h, r, 'seen', nameOf(round, speaker)); record(speaker, h, r, 'own'); }
-      else record(speaker, h, r, 'own');
-      t.hour = h; t.room = r;
-    });
-  });
+  let lastHour = askedHour || t.hour || null;
+  const put = (h, r, sent) => {
+    if (!HOURS.includes(h) || !ROOMS.includes(r)) return;
+    const other = CAST.find(c => c.id !== speaker && sent.includes(c.name));
+    if (other) { record(other.id, h, r, 'seen', nameOf(round, speaker)); }
+    else if (speaker !== 'player') record(speaker, h, r, 'own');
+    t.hour = h; t.room = r; lastHour = h;
+  };
+  for (const sent of String(text).split(/[.!?\n]/)) {
+    if (!sent.trim()) continue;
+    const rs = ROOMS.map(r => ({ r, i: sent.indexOf(r) })).filter(x => x.i >= 0);
+    if (!rs.length) continue;
+    const hs = HOURS.map(h => ({ h, i: sent.indexOf(h) })).filter(x => x.i >= 0);
+    if (hs.length) {
+      rs.forEach(({ r, i }) => {
+        const near = hs.reduce((a, b) => Math.abs(b.i - i) < Math.abs(a.i - i) ? b : a);
+        put(near.h, r, sent);
+      });
+    } else if (lastHour) {
+      rs.forEach(({ r }) => put(lastHour, r, sent));
+    }
+  }
   topic[speaker] = t;
 }
 function say(who, text) {
   if (who === null) { (chat.__intro ||= []).push({ who: 'sys', text }); renderLog(); return; }
   chat[cur].push({ who, text });
-  if (who !== 'player') { bubbles[cur] = { text, at: Date.now() }; harvest(cur, text); }
+  if (who !== 'player') { bubbles[cur] = { text, at: Date.now() }; harvest(cur, text, lastAskedHour); }
   else harvest('player', text);
   renderLog();
 }
 
 // ── 대사 ────────────────────────────────────────────────────
+let lastAskedHour = null;
 async function ask(id, userText) {
   const intent = classifyIntent(userText);
+  // 플레이어가 시각을 집어 물었으면 그 시각을 답에 이어 붙인다
+  lastAskedHour = intent.hour == null ? lastAskedHour
+    : HOURS.find(h => h === String(intent.hour > 24 ? intent.hour - 24 : intent.hour).padStart(2, '0') + '시'
+                   || h === intent.hour + '시') || lastAskedHour;
   const mem = memories[id];
   // 물어본 것 자체가 기억에 남는다 — 나중에 다른 방에서 이 이야기가 돈다.
   noteAsked(round, mem, topicOf(intent, userText));
