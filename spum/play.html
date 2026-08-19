@@ -39,7 +39,7 @@ header.top{display:flex;align-items:center;gap:14px;margin-bottom:14px}
 #overlay{z-index:2;pointer-events:none}
 .roomtag{position:absolute;left:12px;top:10px;font-size:12px;font-weight:800;color:#fff;
   background:rgba(50,34,22,.62);padding:4px 10px;border-radius:999px;line-height:1.4}
-.log{height:170px;overflow:auto;padding:6px 2px;display:flex;flex-direction:column;gap:10px;margin-top:10px}
+.log{height:96px;overflow:auto;padding:6px 2px;display:flex;flex-direction:column;gap:10px;margin-top:10px}
 .msg{max-width:82%;padding:10px 13px;border-radius:16px;white-space:pre-wrap}
 .msg.npc{background:var(--cream);border:1.5px solid var(--line);border-bottom-left-radius:6px;align-self:flex-start}
 .msg.me{background:#FFE3CC;border:1.5px solid #F2C79A;border-bottom-right-radius:6px;align-self:flex-end}
@@ -61,10 +61,16 @@ th{background:var(--cream);font-size:10.5px;color:var(--ink-soft)}
 td.conflict{background:#FFE2DC;color:#B4442F;font-weight:800}
 td.own{background:#EFF7EA}
 .note{font-size:12px;color:var(--ink-soft)}
-.stage .overchat{position:absolute;left:14px;bottom:14px;width:430px;max-width:46%;z-index:3;
+.stage .overchat{position:absolute;left:14px;bottom:10px;width:500px;max-width:52%;z-index:3;
   background:rgba(255,253,248,.78);backdrop-filter:blur(4px);border:1.5px solid rgba(231,211,184,.9);
-  border-radius:16px;box-shadow:0 10px 30px rgba(90,60,30,.22);padding:12px;line-height:1.6;
+  border-radius:14px;box-shadow:0 8px 24px rgba(90,60,30,.20);padding:8px 10px;line-height:1.45;
   opacity:.72;transition:opacity .15s}
+.stage .overchat h3{display:none}
+.stage .overchat .ask{margin-top:6px}
+.stage .overchat .ask input{padding:8px 11px}
+.stage .overchat .quick{margin-top:5px;flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px}
+.stage .overchat .quick button{white-space:nowrap}
+.stage .overchat .msg{padding:7px 10px;border-radius:12px}
 .stage .overchat:hover,.stage .overchat:focus-within{opacity:1;background:rgba(255,253,248,.96)}
 .stage .overchat.away{display:none}
 #chatToggle{position:absolute;left:14px;bottom:14px;z-index:4;padding:8px 14px;border-radius:999px;
@@ -452,7 +458,7 @@ function updateProximity() {
 // 같은 자리에 오래 서 있으면 한 조각씩 주고받는다. 받은 쪽은 출처를 달아 기억한다.
 // 플레이어의 증언판에는 자동으로 오르지 않는다 — 가까이 있어서 엿들어야 올라간다.
 const GOSSIP_RANGE = 2.5;      // 이 안에 들어와야 말을 섞는다
-const GOSSIP_COOLDOWN = 11000; // 같은 짝은 이 간격으로만 — 너무 빨리 오가면 읽을 틈이 없다
+const GOSSIP_COOLDOWN = 21000; // 같은 짝은 이 간격으로만 — 너무 빨리 오가면 읽을 틈이 없다
 const EARSHOT = 5;             // 플레이어가 이 안에 있으면 엿듣는다
 
 function sysLine(text) {
@@ -578,7 +584,7 @@ function drawOverlay() {
     if (cur === c.id) { cx.strokeStyle = '#FFB86B'; cx.lineWidth = 2; cx.strokeRect(px - 10, py - 26, TS + 20, TS + 32); }
     // 이름은 SPUM BubbleRenderer 가 캐릭터 위에 이미 그린다 — 여기서 또 그리지 않는다.
     const bub = bubbles[c.id];
-    if (bub && Date.now() - bub.at < 13000) {
+    if (bub && Date.now() - bub.at < 16000) {
       cx.font = '600 17px "Pretendard",system-ui';
       const lines = bub.text.replace(/\n+/g, ' ').match(/.{1,18}/g)?.slice(0, 3) || [];
       const bw = Math.max(...lines.map(l => cx.measureText(l).width)) + 24, bh = lines.length * 22 + 16;
@@ -787,6 +793,19 @@ function verdict(who, hour, wit) {
 function chooseCharacter() {
   return new Promise(resolve => {
     const dlg = $('#dlg'), body = $('#dlgBody');
+    let done = false;
+    // Esc 나 바깥 클릭으로 닫히면 안 된다 — 고르기 전에는 창이 사라지지 않는다
+    const block = e => { if (!done) e.preventDefault(); };
+    const reopen = () => { if (!done) dlg.showModal(); };
+    dlg.addEventListener('cancel', block);
+    dlg.addEventListener('close', reopen);
+    const finish = id => {
+      done = true;
+      dlg.removeEventListener('cancel', block);
+      dlg.removeEventListener('close', reopen);
+      dlg.close();
+      resolve(id);
+    };
     body.innerHTML = '';
     body.append(el('h2', null, '누구로 살겠나'));
     body.append(el('p', 'note', '여섯 하우스메이트 가운데 하나를 고른다. 나머지 다섯이 용의자다.'));
@@ -796,7 +815,7 @@ function chooseCharacter() {
       const colors = CHARACTER_COLORS[c.id] || {};
       b.style.borderLeft = '6px solid ' + (colors.body || '#ccc');
       b.textContent = (CHARACTER_EMOJI[c.id] || '👤') + ' ' + c.name + ' · ' + c.species;
-      b.onclick = () => { dlg.close(); resolve(c.id); };
+      b.onclick = () => finish(c.id);
       wrap.append(b);
     });
     body.append(wrap);

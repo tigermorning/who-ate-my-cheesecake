@@ -31,7 +31,14 @@ const r = await page.evaluate(async ({ W, H, rows, blocked }) => {
   const out = {};
   const chars = new Set(rows.join('').split(''));
   const border = s => s.x === 0 || s.y === 0 || s.x === W - 1 || s.y === H - 1;
-  const free = s => !blocked[s.y * W + s.x];        // 가구가 없는 칸만 — 순수 바닥을 뽑는다
+  const isWallCh = (x, y) => (x < 0 || y < 0 || x >= W || y >= H) ? true : rows[y][x] === '#';
+  // 벽·울타리에 붙은 칸은 테두리 조각이 섞인다 — 한 칸 이상 떨어진 곳만 쓴다
+  const away = s => {
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++)
+      if (isWallCh(s.x + dx, s.y + dy)) return false;
+    return true;
+  };
+  const free = s => !blocked[s.y * W + s.x] && away(s);
   // 그 방의 대표색(중앙값)에 가까우면서 평평한 칸을 고른다
   const med = arr => { const a = [...arr].sort((x, y) => x - y); return a[Math.floor(a.length / 2)]; };
   const pickBest = cells => {
@@ -43,6 +50,11 @@ const r = await page.evaluate(async ({ W, H, rows, blocked }) => {
     if (ch === '#') continue;
     let cells = stat.filter(s => rows[s.y][s.x] === ch && free(s));
     if (!cells.length) cells = stat.filter(s => rows[s.y][s.x] === ch);
+    // 뜰·텃밭은 풀색이 우세한 칸만 — 길이나 흙이 섞이면 잔디가 갈색이 된다
+    if (ch === '.' || ch === 'V') {
+      const green = cells.filter(c => c.g > c.r && c.g > c.b);
+      if (green.length) cells = green;
+    }
     const best = pickBest(cells);
     out[ch] = { x: best.x, y: best.y, rgb: [best.r, best.g, best.b], v: best.v, n: cells.length };
   }
