@@ -701,7 +701,8 @@ async function ask(id, userText) {
   const mem = memories[id];
   // 물어본 것 자체가 기억에 남는다 — 나중에 다른 방에서 이 이야기가 돈다.
   noteAsked(round, mem, topicOf(intent, userText));
-  const msgs = buildMessages({ round, id, world, history: chat[id].slice(-8), userText, intent, mem, persona: castPersona[id] });
+  const msgs = buildMessages({ round, id, world, history: chat[id].slice(-8), userText, intent, mem,
+    persona: castPersona[id], playerCard: playerCardOf() });
   if (!llmReady) return template(id, userText);
   try {
     const r = await fetch('/api/sam/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -805,6 +806,14 @@ function chooseCharacter() {
 
 // 고를 때마다 인격표를 다시 만든다. 플레이어가 고른 캐릭터는 빼고 채운다 —
 // 그래야 성격·MBTI 가 SAM 프롬프트에 실릴 길 자체가 없다.
+// NPC 에게 알려 줄 「네가 누구인지」. 직업과 내력만이다 — 성격·MBTI·말투는 뺀다.
+function playerCardOf() {
+  const p = castPersonaAll[PLAYER_ID];
+  const name = (CAST.find(c => c.id === PLAYER_ID) || {}).name || '';
+  if (!p) return { name };
+  return { name, occupation: p.occupation || '', background: p.background || '' };
+}
+
 async function pickPlayer() {
   PLAYER_ID = await chooseCharacter();
   Object.keys(castPersona).forEach(k => delete castPersona[k]);
@@ -834,7 +843,8 @@ function newRound() {
   const meName = (CAST.find(c => c.id === PLAYER_ID) || {}).name || '나';
   $('#myrole').innerHTML = '넌 <b>' + meName + '</b>다. 넌 안 먹었다. <b>진짜 먹은 하나</b>를 찾아라.'
     + '<br><span class="note">네 방패: "' + me.shield.line + '"</span>'
-    + '<br><span class="note">네 성격·MBTI 는 판에서 빠진다 — 말은 네가 한다.</span>';
+    + '<br><span class="note">식구들은 네가 ' + ((castPersonaAll[PLAYER_ID] || {}).occupation || '누구인지') + '라는 건 안다.'
+    + ' 하지만 네 성격·MBTI 는 판에서 빠진다 — 말은 네가 하고 싶은 대로 한다.</span>';
   say(null, '아침이다. 냉장고 앞에 빈 접시만 덩그러니 놓여 있다. 어젯밤 집 안에는 여섯뿐이었다.');
 }
 

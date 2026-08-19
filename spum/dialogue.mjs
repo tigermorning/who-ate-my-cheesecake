@@ -111,7 +111,18 @@ export function personaLines(persona, fallbackTone = '') {
   return L;
 }
 
-export function buildMessages({ round, id, world, history = [], userText, mood = null, intent = null, mem = null, persona = null }) {
+// 플레이어 쪽은 「누구인가」만 넘긴다 — 직업과 내력까지.
+// 성격 목록·MBTI·말투는 넘기지 않는다. 말은 사람이 직접 치는 것이고 채점 대상이 아니다.
+export function playerCardLines(card) {
+  if (!card) return [];
+  const L = [`[말을 거는 사람] ${card.name}${card.occupation ? ' — ' + card.occupation : ''}. 같이 사는 하우스메이트다.`];
+  if (card.background) L.push('· ' + card.background);
+  L.push('· 이 사람이 어젯밤 어디 있었는지는 네가 본 만큼만 안다. 본 적 없으면 모른다.');
+  L.push('· 이 사람의 직업과 사정을 알고 있으니 그에 맞게 받아라. 말투까지 넘겨짚지는 마라.');
+  return L;
+}
+
+export function buildMessages({ round, id, world, history = [], userText, mood = null, intent = null, mem = null, persona = null, playerCard = null }) {
   // 플레이어 캐릭터는 AI 가 대신 말하지 않는다 — 인격도 SAM 에 보내지 않는다.
   if (round.playerId && id === round.playerId) throw new Error('플레이어 캐릭터는 SAM 이 대신 말하지 않는다');
   const v = VOICE[id] || { tone: '', shots: [] };
@@ -136,13 +147,15 @@ export function buildMessages({ round, id, world, history = [], userText, mood =
     '',
     factSheet(round, id, intent, mem),
     '',
+    ...playerCardLines(playerCard),
+    '',
     '[대답하는 법]',
     '· ' + actHint,
     '· 두세 문장을 넘기지 않는다. 시각과 장소를 한 번에 세 칸 이상 늘어놓지 않는다.',
     '· 묻지 않은 사건 정보는 먼저 흘리지 않는다. 다만 대화 자체는 열려 있다 —',
     '  날씨든 빵이든 상대 이야기든, 물어오면 네 성격대로 편하게 받고 되물어도 된다.',
     '· 정해진 문장 틀에 맞추지 마라. 매번 다르게 말한다.',
-    '· 상대는 같이 사는 고양이다. 심문관이 아니다. 편하게 대한다.',
+    '· 상대는 심문관이 아니라 같이 사는 식구다. 편하게 대한다.',
     '· 남에게 전해 들은 이야기는 출처를 밝히고 말한다. 네가 직접 본 것처럼 말하지 않는다.',
     mood ? '· 지금 기분: ' + mood : '',
   ].filter(Boolean).join('\n');
