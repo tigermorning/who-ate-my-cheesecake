@@ -57,20 +57,37 @@
 
 **교훈: `serve.mjs` 는 반드시 백그라운드로 띄운다.** 포그라운드로 띄우면 셸 타임아웃에 같이 죽는다.
 
+## 08-19 13:50 복구 작업 (Claude Code)
+직전 세션이 남긴 캐릭터 주입은 **저장소를 깨뜨린 상태**였다. Cast Editor 가 "캐릭터가 없습니다" 를
+띄우고 원본 5종까지 안 보였다. 원인과 조치:
+
+- `sv_studio_characters_v1` 은 **배열**인데 `inject-characters.mjs` 가 `{...existing, ...chars}` 로
+  병합해 **객체(map)로 바꿔놨다** → Studio 파싱 실패
+- 주입 캐릭터가 schemaVersion 2 필드를 안 채웠다 → `animation.idle` 없음
+  → 콘솔의 `[Animator] No animation for state: IDLE` 이 여기서 나왔다
+- 조치: `spum/repair-characters.mjs` 신규. 원본 캐릭터를 템플릿으로 통째 복제해 스키마를 물려받고,
+  `cast.json` 의 이름·persona·appearance 만 덮어쓴다. 기억/관계는 비운다.
+- 결과: 배열 11종(원본 5 + 캐스트 6) 복구, Cast Editor 정상 표시, 서버 rev 55 → **56** 저장 확인
+- `cast.json` 오염 2건도 정리 (`好奇心`→`호기심`, `"_social"`→`"사교적"`)
+
+**`inject-characters.mjs` 는 쓰지 마라.** `repair-characters.mjs` 가 대체한다.
+
 ## 다음 할 일
-1. **캐릭터 6종 주입 확인** — `node spum/check-characters.mjs` (Windows node 로 실행)
-2. Cast Export / 서버 저장 — `window.spumStudioData.saveServerSnapshot('manual')`
-3. play.html 에서 SPUM 런타임 캐릭터 렌더링 확인
-4. Step 5 (NPC 기억+소통) → Step 6 (LANDMARKS 연결) → Step 7 (데모 검증)
+1. **play.html 에서 SPUM 런타임 캐릭터 렌더링 확인** — 복구된 11종을 런타임이 그리는지
+2. Step 5 (NPC 기억+소통) → Step 6 (LANDMARKS 연결) → Step 7 (데모 검증)
 
 ## 막힌 것 / 주의
 - SPKG 암호화 → 스프라이트 직접 접근 불가
 - SPUM 의존성 570+ → 로컬 번들링 어려움
+- **브라우저가 저절로 닫히는 건 캔버스 문제가 아니다.** 스크립트가 끝에서 `context.close()` 를
+  부르거나, node 프로세스가 죽으면(셸 타임아웃 등) 브라우저도 같이 죽는 것이다. 페이지 크래시나
+  렌더러 오류는 관측된 적이 없다 — 08-19 복구 실행에서 `page.on('crash')` 무반응, 스크린샷 정상.
+  열어두고 보려면 `node spum/repair-characters.mjs` (닫지 않는다), 자동화만 하려면 `--close`.
+- **Cast 목록은 8종씩 페이지가 나뉜다.** 6종이 다 안 보이면 2페이지를 봐라.
 - **Playwright 는 Windows node 로 돌려야 한다.** 프로필이 `%TEMP%\spum-chrome-profile`
   (= `C:\Users\user\AppData\Local\Temp\spum-chrome-profile`) 에 있고 여기에 SPUM 로그인이 붙어 있다.
   WSL node 로 돌리면 `/tmp/spum-chrome-profile` 을 보게 되어 로그인이 없다.
-- `cast.json` 오염 2건: `sgn_coco` 배경에 중국어 `好奇心`, `sgn_peach` 성격에 `"_social"`.
-  SAM 프롬프트로 나가기 전에 고칠 것.
+- `cast.json` 의 `scale` 은 Studio 스키마에 없는 우리 자체 필드다. 주입하지 않는다.
 - SPUM 대시보드에 Unity 패키지 다운로드가 있다 (`https://spum.soonsoon.ai/dashboard.html#dashboard-packages`).
   아직 안 써봤다.
 
@@ -78,7 +95,8 @@
 - `CLAUDE.md` — **SPUM Studio + SAM 작업 가이드 (팀 공용, 263줄).** 작업 전에 읽어라. 신뢰도 별표 표기 있음
 - `spum/play.html` — 메인 게임 (Step 1~4 + SPUM 런타임 렌더링)
 - `spum/serve.mjs` — 정적 서버 + SAM 프록시 + 브라우저 다리 (`/api/bridge/pull|push`, `/bridge.js`), 포트 8790
-- `spum/inject-characters.mjs` — Playwright 로 Studio `sv_studio_characters_v1` 에 캐스트 주입
+- `spum/repair-characters.mjs` — **캐릭터 주입 정본.** 배열 형태 유지 + schemaVersion 2 스키마 준수
+- `spum/inject-characters.mjs` — ⚠️ 저장소를 깨뜨린다. 쓰지 마라 (기록용으로만 남김)
 - `spum/check-characters.mjs` — 주입 결과 확인 + 스크린샷 (`spum/screenshots/`)
 - `spum/spummap.mjs` — SPUM 맵 로더
 - `spum/house-map.json` — SPUM Studio 맵 (40x30, 4 레이어)
