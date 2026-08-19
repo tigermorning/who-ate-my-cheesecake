@@ -116,6 +116,10 @@ dialog::backdrop{background:rgba(60,40,25,.45)}
       <h3>하우스메이트</h3>
       <div id="roster"></div>
       <p class="note" id="myrole" style="margin-top:10px"></p>
+      <p class="note" id="keys" style="margin-top:6px">
+        <b>W A S D</b> · <b>↑ ← ↓ →</b> 걷기 &nbsp;·&nbsp; <b>E</b> 옆 사람에게 말 걸기 &nbsp;·&nbsp;
+        <b>Space</b> 대화 시작/이어가기 &nbsp;·&nbsp; <b>Esc</b> 대화 닫기 &nbsp;·&nbsp; <b>Tab</b> 증언판 여닫기
+      </p>
     </section>
 
     <section class="card">
@@ -554,12 +558,25 @@ function updateGossip() {
 }
 
 // ── 키보드 ──────────────────────────────────────────────────
+// W/A/S/D · ↑↓←→ 걷기 · E 말 걸기 · Space 대화 시작/이어가기 · Esc 닫기 · Tab 증언판
 window.addEventListener('keydown', e => {
-  if (document.activeElement?.tagName === 'INPUT') return;
+  const typing = document.activeElement?.tagName === 'INPUT';
+
+  // Esc 는 타이핑 중에도 듣는다 — 안 그러면 대화창에 갇혀 걸을 수가 없다
+  if (e.key === 'Escape') { e.preventDefault(); document.activeElement?.blur?.(); closeChat(); return; }
+  // Tab 은 증언판 여닫기 (브라우저 포커스 이동을 막는다)
+  if (e.key === 'Tab') { e.preventDefault(); toggleBoard(); return; }
+  if (typing) return;
+
   const dir = { ArrowUp:[0,-1], ArrowDown:[0,1], ArrowLeft:[-1,0], ArrowRight:[1,0], w:[0,-1], s:[0,1], a:[-1,0], d:[1,0], W:[0,-1], S:[0,1], A:[-1,0], D:[1,0] }[e.key];
   if (dir && !playerMoving) { e.preventDefault(); const nx = playerGrid.x + dir[0], ny = playerGrid.y + dir[1]; if (isWalkable(nx, ny)) startPlayerMove([{ x: nx, y: ny }]); }
   if ((e.key === 'e' || e.key === 'E') && nearestNPC) { cur = nearestNPC; renderRoster(); renderLog(); openChat(); }
-  if (e.key === 'Escape') closeChat();
+  // Space — 대화창이 닫혀 있으면 가까운 NPC 와 시작, 열려 있으면 입력칸으로 돌아간다
+  if (e.key === ' ' || e.code === 'Space') {
+    e.preventDefault();
+    if (chatOpen()) $('#say')?.focus();
+    else if (nearestNPC) { cur = nearestNPC; renderRoster(); renderLog(); openChat(); }
+  }
 });
 
 // ── 그리기 ──────────────────────────────────────────────────
@@ -968,6 +985,13 @@ window.__wamc = {
 let chatCard = null;
 function openChat() { chatCard?.classList.remove('away'); const t = $('#chatToggle'); if (t) t.style.display = 'none'; $('#say')?.focus(); }
 function closeChat() { chatCard?.classList.add('away'); const t = $('#chatToggle'); if (t) t.style.display = ''; }
+function chatOpen() { return !!chatCard && !chatCard.classList.contains('away'); }
+// 증언판은 #board 를 품은 카드를 접었다 폈다 한다 (새 UI 를 만들지 않는다)
+function toggleBoard() {
+  const card = $('#board')?.closest('.card');
+  if (!card) return;
+  card.style.display = card.style.display === 'none' ? '' : 'none';
+}
 (function overlayChat() {
   const card = [...document.querySelectorAll('.grid .card')].find(c => c.querySelector('#log'));
   const stage = document.querySelector('#stage');
