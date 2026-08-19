@@ -39,7 +39,7 @@ header.top{display:flex;align-items:center;gap:14px;margin-bottom:14px}
 #overlay{z-index:2;pointer-events:none}
 .roomtag{position:absolute;left:12px;top:10px;font-size:12px;font-weight:800;color:#fff;
   background:rgba(50,34,22,.62);padding:4px 10px;border-radius:999px;line-height:1.4}
-.log{height:260px;overflow:auto;padding:6px 2px;display:flex;flex-direction:column;gap:10px;margin-top:10px}
+.log{height:170px;overflow:auto;padding:6px 2px;display:flex;flex-direction:column;gap:10px;margin-top:10px}
 .msg{max-width:82%;padding:10px 13px;border-radius:16px;white-space:pre-wrap}
 .msg.npc{background:var(--cream);border:1.5px solid var(--line);border-bottom-left-radius:6px;align-self:flex-start}
 .msg.me{background:#FFE3CC;border:1.5px solid #F2C79A;border-bottom-right-radius:6px;align-self:flex-end}
@@ -61,6 +61,18 @@ th{background:var(--cream);font-size:10.5px;color:var(--ink-soft)}
 td.conflict{background:#FFE2DC;color:#B4442F;font-weight:800}
 td.own{background:#EFF7EA}
 .note{font-size:12px;color:var(--ink-soft)}
+.stage .overchat{position:absolute;left:14px;bottom:14px;width:430px;max-width:46%;z-index:3;
+  background:rgba(255,253,248,.78);backdrop-filter:blur(4px);border:1.5px solid rgba(231,211,184,.9);
+  border-radius:16px;box-shadow:0 10px 30px rgba(90,60,30,.22);padding:12px;line-height:1.6;
+  opacity:.72;transition:opacity .15s}
+.stage .overchat:hover,.stage .overchat:focus-within{opacity:1;background:rgba(255,253,248,.96)}
+.stage .overchat.away{display:none}
+#chatToggle{position:absolute;left:14px;bottom:14px;z-index:4;padding:8px 14px;border-radius:999px;
+  background:rgba(255,253,248,.9);backdrop-filter:blur(3px)}
+#chatClose{position:absolute;right:10px;top:8px;padding:2px 9px;border-radius:999px;font-size:13px;box-shadow:none}
+.stage .overchat h3{margin-bottom:6px}
+.stage .overchat .quick button{padding:5px 9px;font-size:12px}
+@media (max-width:900px){.stage .overchat{position:static;max-width:100%;width:auto}}
 dialog{border:none;border-radius:20px;padding:0;box-shadow:0 20px 60px rgba(90,60,30,.3);max-width:520px}
 dialog::backdrop{background:rgba(60,40,25,.45)}
 .dlg{padding:22px;background:var(--card)}
@@ -113,7 +125,8 @@ dialog::backdrop{background:rgba(60,40,25,.45)}
     <section class="card">
       <h3>증언판 — 누가 어디 있었다고 했나</h3>
       <div id="board"></div>
-      <p class="note" style="margin-top:8px">● 본인 진술 · ○ 목격 · 빨강은 같은 시각에 두 곳</p>
+      <p class="note" style="margin-top:8px">● 본인 진술 · ○ 목격 · 빨강은 같은 시각에 두 곳<br>
+        엿들은 소문은 여기 안 올라간다 — 직접 물어서 확인해라</p>
     </section>
   </div>
 </div>
@@ -439,7 +452,7 @@ function updateProximity() {
 // 같은 자리에 오래 서 있으면 한 조각씩 주고받는다. 받은 쪽은 출처를 달아 기억한다.
 // 플레이어의 증언판에는 자동으로 오르지 않는다 — 가까이 있어서 엿들어야 올라간다.
 const GOSSIP_RANGE = 2.5;      // 이 안에 들어와야 말을 섞는다
-const GOSSIP_COOLDOWN = 4200;  // 같은 짝은 이 간격으로만
+const GOSSIP_COOLDOWN = 11000; // 같은 짝은 이 간격으로만 — 너무 빨리 오가면 읽을 틈이 없다
 const EARSHOT = 5;             // 플레이어가 이 안에 있으면 엿듣는다
 
 function sysLine(text) {
@@ -448,22 +461,23 @@ function sysLine(text) {
   renderLog();
 }
 
+// 엿들은 것은 증언판에 올리지 않는다. 귀띔일 뿐이다 —
+// 판에 올리려면 네가 직접 물어서 그 사람 입으로 듣거나(harvest), 네 눈으로 봐야 한다.
 function overhear(fromId, toId, g, line) {
-  const e = g.entry;
-  if (e.k === 'place' && e.who && e.who !== '__player') record(e.who, e.hour, e.room, 'heard', nameOf(round, fromId));
   sysLine('(엿들었다) ' + nameOf(round, fromId) + ' → ' + nameOf(round, toId) + ': ' + line);
 }
 
-let gossipInFlight = 0;
+let gossipInFlight = 0, samCooldownUntil = 0;   // SAM 이 429 를 주면 잠깐 쉰다
 // 사실은 memory.mjs 가 고르고, 문장은 SAM 이 짓는다. SAM 이 없거나 밀리면 기본 문장을 쓴다.
 async function phraseGossip(speakerId, listenerId, g, fallback) {
-  if (!llmReady || gossipInFlight >= 2) return fallback;
+  if (!llmReady || gossipInFlight >= 1 || Date.now() < samCooldownUntil) return fallback;
   gossipInFlight++;
   try {
     const msgs = buildGossipMessages({ round, speakerId, listenerId,
       persona: castPersona[speakerId], fact: fallback, kind: (g.src || g.entry).k });
     const r = await fetch('/api/sam/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: MODEL.fast, messages: msgs, temperature: 1, max_tokens: 90 }) });
+    if (r.status === 429) { samCooldownUntil = Date.now() + 45000; return fallback; }
     const j = await r.json();
     const t = String(j.choices?.[0]?.message?.content || '').trim();
     if (!t) return fallback;
@@ -511,7 +525,8 @@ window.addEventListener('keydown', e => {
   if (document.activeElement?.tagName === 'INPUT') return;
   const dir = { ArrowUp:[0,-1], ArrowDown:[0,1], ArrowLeft:[-1,0], ArrowRight:[1,0], w:[0,-1], s:[0,1], a:[-1,0], d:[1,0], W:[0,-1], S:[0,1], A:[-1,0], D:[1,0] }[e.key];
   if (dir && !playerMoving) { e.preventDefault(); const nx = playerGrid.x + dir[0], ny = playerGrid.y + dir[1]; if (isWalkable(nx, ny)) startPlayerMove([{ x: nx, y: ny }]); }
-  if ((e.key === 'e' || e.key === 'E') && nearestNPC) { cur = nearestNPC; renderRoster(); renderLog(); $('#say').focus(); }
+  if ((e.key === 'e' || e.key === 'E') && nearestNPC) { cur = nearestNPC; renderRoster(); renderLog(); openChat(); }
+  if (e.key === 'Escape') closeChat();
 });
 
 // ── 그리기 ──────────────────────────────────────────────────
@@ -563,14 +578,15 @@ function drawOverlay() {
     if (cur === c.id) { cx.strokeStyle = '#FFB86B'; cx.lineWidth = 2; cx.strokeRect(px - 10, py - 26, TS + 20, TS + 32); }
     // 이름은 SPUM BubbleRenderer 가 캐릭터 위에 이미 그린다 — 여기서 또 그리지 않는다.
     const bub = bubbles[c.id];
-    if (bub && Date.now() - bub.at < 9000) {
-      const lines = bub.text.replace(/\n+/g, ' ').match(/.{1,16}/g)?.slice(0, 3) || [];
-      const bw = Math.max(...lines.map(l => cx.measureText(l).width)) + 18, bh = lines.length * 15 + 12;
-      const bx = px + TS / 2 - bw / 2, by = py + TS - 104 - bh;
-      cx.fillStyle = 'rgba(255,253,248,.96)'; cx.strokeStyle = '#E7D3B8'; cx.lineWidth = 1.5;
-      cx.beginPath(); cx.roundRect(bx, by, bw, bh, 10); cx.fill(); cx.stroke();
-      cx.fillStyle = '#4A3728'; cx.font = '12px "Pretendard",system-ui';
-      lines.forEach((l, i) => cx.fillText(l, px + TS / 2, by + 18 + i * 15));
+    if (bub && Date.now() - bub.at < 13000) {
+      cx.font = '600 17px "Pretendard",system-ui';
+      const lines = bub.text.replace(/\n+/g, ' ').match(/.{1,18}/g)?.slice(0, 3) || [];
+      const bw = Math.max(...lines.map(l => cx.measureText(l).width)) + 24, bh = lines.length * 22 + 16;
+      const bx = px + TS / 2 - bw / 2, by = py - 14 - bh;
+      cx.fillStyle = 'rgba(255,253,248,.97)'; cx.strokeStyle = '#D9C29B'; cx.lineWidth = 2;
+      cx.beginPath(); cx.roundRect(bx, by, bw, bh, 12); cx.fill(); cx.stroke();
+      cx.fillStyle = '#4A3728';
+      lines.forEach((l, i) => cx.fillText(l, px + TS / 2, by + 26 + i * 22));
     }
   });
   cx.textAlign = 'left';
@@ -586,7 +602,7 @@ function sceneClick(ev) {
     const s = SPOT[c.id]; const d = Math.hypot(s.x + .5 - x, s.y + .5 - y);
     if (d < bd) { bd = d; best = c.id; }
   });
-  if (best) { cur = best; renderRoster(); renderLog(); }
+  if (best) { cur = best; renderRoster(); renderLog(); openChat(); }
 }
 function renderRoster() {
   const r = $('#roster'); r.innerHTML = '';
@@ -607,7 +623,7 @@ function renderRoster() {
     const t = el('div'); t.append(el('b', null, c.name), el('span', null, c.species + (isNear ? ' · 근처' : '')
       + ' · 기억 ' + memorySize(memories[c.id]) + (heard ? ' (들은 ' + heard + ')' : '')));
     d.append(avatar, t);
-    d.onclick = () => { cur = c.id; renderRoster(); renderLog(); };
+    d.onclick = () => { cur = c.id; renderRoster(); renderLog(); openChat(); };
     r.append(d);
   });
 }
@@ -859,6 +875,24 @@ window.__wamc = {
   memories, npcState, playerGrid,
   warp(x, y) { playerGrid.x = x; playerGrid.y = y; playerPx.x = x * TS; playerPx.y = y * TS; },
 };
+
+// 대화창을 맵 위에 얹는다 — 아래에 있으면 맵을 보면서 말을 걸 수가 없다
+// 평소엔 접혀 있다가 말을 걸 때만 나온다. 맵을 가리지 않는 것이 먼저다.
+let chatCard = null;
+function openChat() { chatCard?.classList.remove('away'); const t = $('#chatToggle'); if (t) t.style.display = 'none'; $('#say')?.focus(); }
+function closeChat() { chatCard?.classList.add('away'); const t = $('#chatToggle'); if (t) t.style.display = ''; }
+(function overlayChat() {
+  const card = [...document.querySelectorAll('.grid .card')].find(c => c.querySelector('#log'));
+  const stage = document.querySelector('#stage');
+  if (!card || !stage) return;
+  chatCard = card;
+  card.classList.add('overchat', 'away');
+  card.style.position = 'absolute';
+  const x = el('button', null, '✕'); x.id = 'chatClose'; x.onclick = closeChat; card.append(x);
+  stage.append(card);
+  const t = el('button', null, '💬 대화'); t.id = 'chatToggle'; t.onclick = openChat;
+  stage.append(t);
+})();
 
 boot();
 </script>
