@@ -1,0 +1,57 @@
+{
+ "id": "SMO_mszpecmc_LADA",
+ "grid": "16x16",
+ "tileSize": 32,
+ "count": 227,
+ "byRole": {
+  "detail": 36,
+  "wall": 74,
+  "water": 22,
+  "object": 41,
+  "floor": 54
+ },
+ "sample": [
+  {
+   "id": "11",
+   "name": "detail 11",
+   "role": "detail",
+   "cells": 1,
+   "cat": "floor"
+  },
+  {
+   "id": "12",
+   "name": "wall 12",
+   "role": "wall",
+   "cells": 1,
+   "cat": "obstacle_blocking"
+  },
+  {
+   "id": "13",
+   "name": "wall 13",
+   "role": "wall",
+   "cells": 1,
+   "cat": "obstacle_blocking"
+  },
+  {
+   "id": "14",
+   "name": "wall 14",
+   "role": "wall",
+   "cells": 1,
+   "cat": "obstacle_blocking"
+  },
+  {
+   "id": "15",
+   "name": "wall 15",
+   "role": "wall",
+   "cells": 1,
+   "cat": "obstacle_blocking"
+  },
+  {
+   "id": "16",
+   "name": "wall 16",
+   "role": "wall",
+   "cells": 1,
+   "cat": "obstacle_blocking"
+  }
+ ]
+}

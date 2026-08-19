@@ -202,7 +202,8 @@ if (STEP === 'theme') {
   await page.screenshot({ path: path.join(SHOTS, '10-studio.png') });
 }
 console.log('스크린샷:', SHOTS);
-// 붙어 쓴 창은 닫지 않는다 — 닫으면 생성이 끊기고 로그인도 날아간다
-if (browser) { await browser.close(); console.log('연결만 끊었다. 창은 그대로 있다'); }
+// 붙어 쓴 창은 건드리지 않는다.
+// ⚠️ CDP 로 붙었을 때 browser.close() 를 부르면 크롬이 통째로 닫힌다. 부르지 마라.
+if (browser) { console.log('창은 그대로 둔다'); process.exit(0); }
 else if (process.argv.includes('--close')) await ctx.close();
 else { console.log('열어 둔다'); await new Promise(() => {}); }
