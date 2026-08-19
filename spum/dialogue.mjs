@@ -3,72 +3,63 @@
 
 import { knowledgeOf, nameOf, HOURS, ROOMS } from './round.mjs';
 
-// SAM 에서 실제로 열려 있는 모델 (2026-08-18 확인)
-// claude-opus-4.8 · claude-sonnet-4.6 · gpt-5.4 · gpt-5.4-mini · claude-haiku-4-5 · glm-4.7
+// SAM 에서 실제로 열려 있는 모델
 export const MODEL = { fast: 'claude-haiku-4-5', normal: 'claude-sonnet-4.6', best: 'claude-opus-4.8' };
 
-// ── 성격 카드 — 말투는 예문으로 준다. 설명보다 예문이 훨씬 잘 붙는다 ──────
+// ── 성격 카드 ──────────────────────────────────────────────
 export const VOICE = {
-  sgn_deer: {
-    tone: '짧고 정중하다. 군더더기가 없다. 감정을 드러내지 않는다. 추궁당하면 더 짧아진다.',
-    shots: ['현관 쪽에 있었다. 늘 하듯이.', '23시엔 서재. 아무도 없었다.', '내가 본 것만 말하겠다.'],
+  sgn_haru: {
+    tone: '밝고 다정한 존댓말. 느낌표가 많다. 긍정적 표현을 즐긴다.',
+    shots: ['저요?! 저는 부엌에서 빵 구우고 있었어요!', '아 ResourceBundle 새로운 빵 레시피를 시도 중이었거든요~', '다들 맛있는 냄새가 나서 부엌으로 온 거 아니에요?'],
   },
-  sgn_horse: {
-    tone: '존댓말. 말끝이 흐려지고 스스로를 의심하는 말이 붙는다. 다독이면 말이 늘고 다그치면 짧아진다.',
-    shots: ['저는… 거실에 있었어요, 아마요.', '아, 그게… 확실친 않지만요.', '무섭게 안 물어보시면 안 돼요…?'],
+  sgn_mina: {
+    tone: '짧고 정중한 말투. 감정을 잘 드러내지 않는다. 한 번에 한 가지만 말한다.',
+    shots: ['서재에 있었다. 시를 쓰고.', '그 시각, 아무도 없었다.', '관찰한 것만 말하겠다.'],
   },
-  sgn_penguin: {
-    tone: '전제를 깔고 시작한다. 질문을 되돌려 묻는다. 여유로운 존댓말.',
-    shots: ['뭐, 별것 아닙니다만 — 저는 안 먹었습니다.', '그건 그렇고, 그쪽은요?', '기忆이란 게 원래 좀 그렇잖습니까.'],
+  sgn_coco: {
+    tone: '반말에 가까운 편한 말투. 말이 빠르다. 호기심이 많다.',
+    shots: ['나 텃밭에 있었거든! 토마토 봤어!', '아 근데 부엌 쪽에서 냄새 났는데?', '誰가 밤에 돌아다니는 거 봤어!'],
   },
-  sgn_rabbit: {
-    tone: '전보문처럼 끊어 말한다. 주어와 조사를 자주 생략한다. 형용사를 쓰지 않는다. 의성어를 쓰지 않는다.',
-    shots: ['21시, 부엌.', '적토마 있었다. 그뿐.', '아니. 안 먹었다.'],
+  sgn_lulu: {
+    tone: '말이 느리고 흐릿하다. 확신이 없는 말투. 하품이 섞인다.',
+    shots: ['아 뭐… 거실 난로 앞이었나…', '그때 좀 졸았는지도…', '꿈을 꾸고 있었는지, 아니었는지…'],
   },
-  sgn_chestnut: {
-    tone: '느낌표가 많은 존댓말. 한 번에 여러 가지를 쏟아 놓는다. 들뜬다.',
-    shots: ['저요?! 저는 서재에 있었어요!', '아 이건 확실해요!', '어… 그건 제가 본 건 아니고 들은 거예요!'],
+  sgn_peach: {
+    tone: '활기찬 말투. 리듬감 있게 말한다. 느낌표가 많다.',
+    shots: ['데크에서 기타 치고 있었어요~♪', '밤바람이 너무 좋아서 오래 있었죠!', '누군가의 발소리를 들은 것 같기도?'],
   },
-  sgn_bull: {
-    tone: '웅장하고 자신만만하다. 감정을 과장해서 표현한다. 의심하면 화를 내기도 한다.',
-    shots: ['아 의심은 없습니다만!', '내가 먹었다고요?! 그건 아니오!', '정면으로 보고 있습니다.'],
+  sgn_ruby: {
+    tone: '도도한 존댓말. 정확하게 말한다. 틀리면 바로 짚어준다.',
+    shots: ['저는 식당에서 재료를 정리하고 있었습니다.', '정확히 22시부터 식당이었어요.', '레시피 확인은 제일 중요한 일이니까요.'],
   },
 };
 
-// ── 질문 의도 분류 (seogo-night.html 의 interpret()를 간소화) ────
+// ── 질문 의도 분류 ──────────────────────────────────────────
 export function classifyIntent(text) {
   const t = text;
-  // 시각 슬롯
   const hourMatch = t.match(/(\d{1,2})시/);
   const hour = hourMatch ? (Number(hourMatch[1]) < 10 ? Number(hourMatch[1]) + 24 : Number(hourMatch[1])) : null;
-  // 장소 슬롯
   const room = ROOMS.find(r => t.includes(r)) || null;
-  // 인물 슬롯
-  const personNames = ['사슴', '적토마', '펭귄', '토끼', '밤톨이', '황소'];
+  const personNames = ['하루', '미나', '코코', '루루', '피치', '루비'];
   const person = personNames.find(n => t.includes(n)) || null;
   const you = /너|자기|네가/.test(t);
-  // 의도
   if (/먹었|먹었어| 먹었|케이크|치즈|도둑/.test(t)) return { act: 'ASK_EATEN', hour, room, person };
-  if (/目睹|目擊|目睹|目擊|봤|보았|보았|봤어|보였/.test(t)) return { act: 'ASK_SIGHTING', hour, room, person };
+  if (/봤|보았|보았|봤어|보였/.test(t)) return { act: 'ASK_SIGHTING', hour, room, person };
   if (/어디|어디에|몇 시|언제|자리|행적|갔/.test(t) && person) return { act: 'ASK_ABOUT', hour, room, person };
   if (/어디|어디에|몇 시|언제|자리|행적|갔/.test(t)) return { act: 'ASK_WHEREABOUTS', hour, room, person };
-  if (/이후|그 뒤|그 다음| sonra/.test(t)) return { act: 'FOLLOW_UP', hour, room, person };
+  if (/이후|그 뒤|그 다음/.test(t)) return { act: 'FOLLOW_UP', hour, room, person };
   if (/안녕|반가워|좋은 아침/.test(t)) return { act: 'GREET', hour, room, person };
   if (/기분|어떠|어때|심정/.test(t)) return { act: 'SOCIAL', hour, room, person };
   return { act: 'UNKNOWN', hour, room, person };
 }
 
-// ── 승인된 사실 카드 (의도에 따라 필터링) ────────────────────
+// ── 승인된 사실 카드 ────────────────────────────────────────
 export function factSheet(round, id, intent = null) {
   const k = knowledgeOf(round, id);
   const act = intent?.act || 'UNKNOWN';
   const L = [];
   L.push('[네가 아는 것 — 이 밖의 시각·장소·인물은 절대 말하지 않는다]');
-
-  // 자기 자리 — 언제나 포함
   L.push('· 네 어젯밤 자리: ' + k.own.map(o => `${o.hour} ${o.room}`).join(' / '));
-
-  // 목격 — 의도가 관련 있을 때만 상세 포함
   if (k.seen.length) {
     if (act === 'ASK_SIGHTING' || act === 'ASK_ABOUT' || act === 'ASK_WHEREABOUTS' || act === 'FOLLOW_UP') {
       L.push('· 네가 같은 방에서 본 것: ' + k.seen.map(s => `${s.hour} ${s.room}에서 ${nameOf(round, s.who)}`).join(' / '));
@@ -132,7 +123,7 @@ export function buildMessages({ round, id, world, history = [], userText, mood =
     { role: 'user', content: userText }];
 }
 
-// ── 검증 — 승인 안 된 시각·장소·인물이 섞이면 되돌린다 ────────
+// ── 검증 ────────────────────────────────────────────────────
 export function violations(round, id, text) {
   const k = knowledgeOf(round, id);
   const ok = new Set();
@@ -141,9 +132,6 @@ export function violations(round, id, text) {
   if (k.planted) ok.add(k.planted.hour + '|' + k.planted.room);
 
   const hits = [];
-  const hoursIn = HOURS.filter(h => text.includes(h));
-  const roomsIn = ROOMS.filter(r => text.includes(r));
-  // 시각과 장소가 한 문장 안에 같이 나오면, 그 짝이 승인된 것이어야 한다
   for (const sent of text.split(/[.!?\n]/)) {
     const hs = HOURS.filter(h => sent.includes(h));
     const rs = ROOMS.filter(r => sent.includes(r));
@@ -151,9 +139,8 @@ export function violations(round, id, text) {
       if (!ok.has(h + '|' + r)) hits.push({ kind: 'pair', hour: h, room: r, sent: sent.trim().slice(0, 40) });
     }
   }
-  // 어젯밤 자기가 못 본 사람을 "봤다"고 하면 안 된다
   const sawNames = round.cast.filter(c => c.id !== id && text.includes(c.name) && /봤|보였|있었/.test(text)).map(c => c.name);
   const allowedNames = new Set(k.seen.map(s => nameOf(round, s.who)).concat(k.planted ? [nameOf(round, k.planted.who)] : []));
   sawNames.forEach(n => { if (!allowedNames.has(n)) hits.push({ kind: 'person', who: n }); });
-  return { ok: hits.length === 0, hits, hoursIn, roomsIn };
+  return { ok: hits.length === 0, hits, hoursIn: HOURS.filter(h => text.includes(h)), roomsIn: ROOMS.filter(r => text.includes(r)) };
 }

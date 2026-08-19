@@ -7,3 +7,7 @@ node_modules/
 
 # OMC 운영 부스러기
 .omc/
+
+# 검증 산출물 · 타임스탬프 백업
+spum/screenshots/
+spum/characters-backup-*.json
