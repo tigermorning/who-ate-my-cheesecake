@@ -32,7 +32,7 @@ header.top{display:flex;align-items:center;gap:14px;margin-bottom:14px}
 .who .avatar{width:56px;height:56px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:28px;flex:0 0 auto}
 .who b{display:block;font-size:15px}
 .who span{font-size:12px;color:var(--ink-soft)}
-.stage{width:1408px;max-width:100%;margin:0 auto;border-radius:14px;border:1.5px solid var(--line);overflow:hidden;position:relative;background:#2A1F18;line-height:0}
+.stage{width:1536px;max-width:100%;margin:0 auto;border-radius:14px;border:1.5px solid var(--line);overflow:hidden;position:relative;background:#2A1F18;line-height:0}
 #bg{position:relative;display:block;width:100%;height:auto;image-rendering:pixelated;z-index:0}
 #scene,#overlay{position:absolute;top:0;left:0;width:100%;height:100%;image-rendering:pixelated}
 #scene{cursor:pointer;z-index:1}
@@ -104,9 +104,9 @@ dialog::backdrop{background:rgba(60,40,25,.45)}
 
   <section class="card" style="padding:8px;margin-bottom:14px">
     <div class="stage" id="stage" style="position:relative">
-      <canvas id="bg" width="1408" height="1152"></canvas>
-      <canvas id="scene" width="1408" height="1152"></canvas>
-      <canvas id="overlay" width="1408" height="1152"></canvas>
+      <canvas id="bg" width="1536" height="1536"></canvas>
+      <canvas id="scene" width="1536" height="1536"></canvas>
+      <canvas id="overlay" width="1536" height="1536"></canvas>
       <div class="roomtag" id="roomtag"></div>
     </div>
   </section>
@@ -283,6 +283,12 @@ const HOUR_INTERVAL = 2700;
 const ROOM_POS = {}; ZONES.forEach(z => { ROOM_POS[z.name] = { x: z.x, y: z.y }; });
 
 const TS = 32, MW = HW, MH = HH;   // 테마 타일이 32px 이다 — 1:1 로 그린다
+// 무대는 도면 크기를 따른다 (48×48 → 1536²). 하드코딩하면 도면을 고칠 때마다 어긋난다.
+for (const id of ['#bg', '#scene', '#overlay']) {
+  const c = document.querySelector(id); if (!c) continue;
+  c.width = MW * TS; c.height = MH * TS;
+}
+{ const st = document.querySelector('.stage'); if (st) st.style.width = (MW * TS) + 'px'; }
 // SPUM 월드 유닛 배율. 런타임 허용 0.035~0.35 (넘기면 잘린다).
 // 0.055 는 한 칸에 딱 맞지만 너무 작아 얼굴이 안 보였다.
 // 타일이 32px 로 커졌으니 배율도 같이 올린다 (24px 때 0.12 = 32px 때 0.16).
@@ -348,9 +354,23 @@ function findPath(sx, sy, ex, ey) {
 }
 function roomToGrid(roomName) {
   const base = ROOM_POS[roomName]; if (!base) return null;
-  const dirs = [[0,0],[0,-1],[0,1],[-1,0],[1,0],[-1,-1],[1,-1],[-1,1],[1,1],[0,-2],[0,2],[-2,0],[2,0]];
-  for (const [dx, dy] of dirs) { const x = base.x + dx, y = base.y + dy; if (isWalkable(x, y)) return { x, y }; }
-  return base;
+  // 이름표 자리부터 나선으로 넓혀 가며 **빈 칸**을 찾는다.
+  // 막힌 칸을 돌려주면 NPC 가 가구 위에 서 버린다 (예전 버그).
+  for (let r = 0; r <= 8; r++) {
+    for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+      const x = base.x + dx, y = base.y + dy;
+      if (isWalkable(x, y) && roomOf(x, y) === roomName) return { x, y };
+    }
+  }
+  for (let r = 0; r <= 8; r++) {                       // 방을 못 찾으면 가까운 빈 칸이라도
+    for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+      const x = base.x + dx, y = base.y + dy;
+      if (isWalkable(x, y)) return { x, y };
+    }
+  }
+  return null;
 }
 
 // ── 플레이어 이동 ───────────────────────────────────────────
@@ -904,7 +924,7 @@ async function boot() {
   seatCast();
   await initSPUM();
   if (spumReady) {
-    spumRuntime.setViewport({ cssWidth: 1408, cssHeight: 1152, dpr: 1 });
+    spumRuntime.setViewport({ cssWidth: MW * TS, cssHeight: MH * TS, dpr: 1 });
     spumRuntime.setRunning(true);
     // 첫 sync — 맵+캐릭터 데이터 전달. 런타임이 자체 rAF로 렌더링 시작.
     syncSPUM();
@@ -921,6 +941,7 @@ window.__wamc = {
   get round() { return round; },
   get gossip() { return gossipCount; },
   memories, npcState, playerGrid,
+  get obstacle() { return spumObstacle; },
   warp(x, y) { playerGrid.x = x; playerGrid.y = y; playerPx.x = x * TS; playerPx.y = y * TS; },
 };
 

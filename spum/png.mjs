@@ -57,3 +57,47 @@ export function surface(w, h, bg = '#00000000') {
   };
   return o;
 }
+
+// ── 읽기 ────────────────────────────────────────────────────
+// 8bit RGBA(colortype 6) · 인터레이스 없음. SPUM 유니티 타일시트를 읽으려고 넣었다.
+import { inflateSync } from 'node:zlib';
+
+export function decodePNG(buf) {
+  if (buf.readUInt32BE(0) !== 0x89504E47) throw new Error('PNG 가 아니다');
+  let o = 8; const idat = []; let w = 0, h = 0, depth = 0, type = 0;
+  while (o < buf.length) {
+    const len = buf.readUInt32BE(o), tag = buf.toString('ascii', o + 4, o + 8);
+    const body = buf.subarray(o + 8, o + 8 + len);
+    if (tag === 'IHDR') {
+      w = body.readUInt32BE(0); h = body.readUInt32BE(4); depth = body[8]; type = body[9];
+      if (body[12] !== 0) throw new Error('인터레이스 PNG 는 못 읽는다');
+    } else if (tag === 'IDAT') idat.push(body);
+    else if (tag === 'IEND') break;
+    o += 12 + len;
+  }
+  if (depth !== 8 || type !== 6) throw new Error(`8bit RGBA 만 읽는다 (depth ${depth}, type ${type})`);
+  const raw = inflateSync(Buffer.concat(idat));
+  const bpp = 4, stride = w * bpp;
+  const px = new Uint8Array(w * h * 4);
+  let prev = new Uint8Array(stride);
+  for (let y = 0; y < h; y++) {
+    const f = raw[y * (stride + 1)];
+    const line = raw.subarray(y * (stride + 1) + 1, y * (stride + 1) + 1 + stride);
+    const cur = new Uint8Array(stride);
+    for (let i = 0; i < stride; i++) {
+      const a = i >= bpp ? cur[i - bpp] : 0, b = prev[i], c = i >= bpp ? prev[i - bpp] : 0;
+      let v = line[i];
+      if (f === 1) v += a;
+      else if (f === 2) v += b;
+      else if (f === 3) v += (a + b) >> 1;
+      else if (f === 4) {
+        const p = a + b - c, pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);
+        v += (pa <= pb && pa <= pc) ? a : (pb <= pc ? b : c);
+      }
+      cur[i] = v & 255;
+    }
+    px.set(cur, y * stride);
+    prev = cur;
+  }
+  return { w, h, px };
+}

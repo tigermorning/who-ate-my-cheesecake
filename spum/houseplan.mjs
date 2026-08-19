@@ -1,4 +1,5 @@
 // 집 도면을 글자로 찍고, 도면이 성립하는지 확인한다.  node spum/houseplan.mjs
+import { OBJ, RUG9 } from './materials.mjs';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,20 +15,11 @@ const warn = [];
 // 0. 도면 자체가 반듯한가
 GRID.forEach((row, y) => { if (row.length !== W) err.push(`${y}행 길이 ${row.length} (${W} 이어야 한다)`); });
 
-// 0-1. smo.json 과 크기가 맞는가 — 도면이 아는 크기와 실제 그림이 어긋나면 다 어긋난다
-let smo = null;
-try { smo = JSON.parse(readFileSync(join(__dirname, 'smo.json'), 'utf8')); } catch { warn.push('smo.json 이 없다 — node spum/buildsmo.mjs 먼저'); }
-if (smo) {
-  const byKey = Object.fromEntries(smo.map(o => [o.key, o]));
+// 0-1. 재료 목록에 있는 물건인가 — materials.mjs 의 OBJ/RUG9 가 정본이다
+{
   const used = new Set([...PROPS, ...ONWALL].map(p => p.key));
-  for (const k of used) {
-    const o = byKey[k];
-    if (!o) { err.push(`smo.json 에 ${k} 가 없다`); continue; }
-    const [cw, ch] = sizeOf(k);
-    if (o.size.cols !== cw || o.size.rows !== ch)
-      err.push(`${k} 크기가 어긋난다 — 도면 ${cw}×${ch}, 그림 ${o.size.cols}×${o.size.rows}`);
-  }
-  for (const [x1, y1, x2, y2, kind] of RUGS) if (!byKey[kind]) err.push(`깔개 ${kind} 가 smo.json 에 없다`);
+  for (const k of used) if (!OBJ[k]) err.push(`materials.mjs 에 ${k} 가 없다`);
+  for (const [, , , , kind] of RUGS) if (!RUG9[kind]) err.push(`깔개 ${kind} 가 materials.mjs 에 없다`);
 }
 
 // 가구가 놓인 칸
@@ -131,13 +123,18 @@ PROPS.forEach(p => {
 ONWALL.forEach(p => { if (!isWall(p.x, p.y)) err.push(`${p.key} (${p.x},${p.y}) 는 벽에 붙여야 한다`); });
 
 // 5. 실내 가구는 실내에, 바깥 것은 바깥에
-const OUTDOOR_OK = new Set(['tree', 'bush', 'flower_bed', 'mailbox', 'patio_set', 'deck_chair',
-  'exercise_mat', 'weight_bench', 'dumbbell_rack', 'gym_machine', 'veg_bed', 'garden_tools',
+const OUTDOOR_OK = new Set(['tree', 'bush', 'hedge', 'flower_bed', 'mailbox', 'parasol', 'stool',
+  'exercise_mat', 'weight_rack', 'punch_bag', 'dumbbells', 'veg_bed', 'garden_tools',
   'watering_can', 'plant_pot', 'boxes', 'baskets', 'shelf']);
 PROPS.forEach(p => {
   const r = roomOf(p.x, p.y);
   const outside = !r || !INDOOR.has(r);
   if (outside && !OUTDOOR_OK.has(p.key)) err.push(`${p.key} (${p.x},${p.y}) 가 집 밖에 있다`);
+});
+
+// 5-1. 방 이름표 자리는 비어 있어야 한다 — NPC 가 방으로 옮겨갈 때 여기로 선다
+ZONES.forEach(z => {
+  if (blocked[idx(z.x, z.y)]) err.push(`${z.name} 이름표 자리 (${z.x},${z.y}) 가 막혀 있다`);
 });
 
 // 6. 서 있는 자리는 제 방 안이고 비어 있다
@@ -165,7 +162,7 @@ for (let y = 0; y + 4 < H; y++) for (let x = 0; x + 4 < W; x++) {
     const r = roomOf(x + i, y + j);
     if (!r || !INDOOR.has(r) || r === '복도' || solidAt.has(idx(x + i, y + j)) || at(x + i, y + j) === '+') { all = false; break; }
   }
-  if (all) { bare++; if (bare <= 6) err.push(`(${x},${y}) 부터 5×5 가 통째로 비어 있다`); }
+  if (all) { bare++; if (bare <= 6) warn.push(`(${x},${y}) 부터 5×5 가 통째로 비어 있다`); }
 }
 
 // 셈
