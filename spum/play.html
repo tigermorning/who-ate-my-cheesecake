@@ -32,8 +32,9 @@ header.top{display:flex;align-items:center;gap:14px;margin-bottom:14px}
 .who .avatar{width:56px;height:56px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:28px;flex:0 0 auto}
 .who b{display:block;font-size:15px}
 .who span{font-size:12px;color:var(--ink-soft)}
-.stage{width:960px;max-width:100%;margin:0 auto;border-radius:14px;border:1.5px solid var(--line);overflow:hidden;position:relative;background:#2A1F18;line-height:0}
+.stage{width:1280px;max-width:100%;margin:0 auto;border-radius:14px;border:1.5px solid var(--line);overflow:hidden;position:relative;background:#2A1F18;line-height:0}
 #scene{width:100%;height:auto;image-rendering:pixelated;cursor:pointer;display:block}
+#bg,#overlay{image-rendering:pixelated}
 .roomtag{position:absolute;left:12px;top:10px;font-size:12px;font-weight:800;color:#fff;
   background:rgba(50,34,22,.62);padding:4px 10px;border-radius:999px;line-height:1.4}
 .log{height:260px;overflow:auto;padding:6px 2px;display:flex;flex-direction:column;gap:10px;margin-top:10px}
@@ -83,9 +84,9 @@ dialog::backdrop{background:rgba(60,40,25,.45)}
 
   <section class="card" style="padding:8px;margin-bottom:14px">
     <div class="stage" id="stage" style="position:relative">
-      <canvas id="bg" width="960" height="720" style="position:absolute;top:0;left:0;z-index:0"></canvas>
-      <canvas id="scene" width="960" height="720" style="position:relative;z-index:1"></canvas>
-      <canvas id="overlay" width="960" height="720" style="position:absolute;top:0;left:0;z-index:2;pointer-events:none"></canvas>
+      <canvas id="bg" width="1280" height="960" style="position:absolute;top:0;left:0;z-index:0"></canvas>
+      <canvas id="scene" width="1280" height="960" style="position:relative;z-index:1"></canvas>
+      <canvas id="overlay" width="1280" height="960" style="position:absolute;top:0;left:0;z-index:2;pointer-events:none"></canvas>
       <div class="roomtag" id="roomtag"></div>
     </div>
   </section>
@@ -260,11 +261,11 @@ let currentHourIndex = 0, hourTimer = 0;
 const HOUR_INTERVAL = 2700;
 const ROOM_POS = {}; ZONES.forEach(z => { ROOM_POS[z.name] = { x: z.x, y: z.y }; });
 
-const TS = 24, MW = HW, MH = HH;
+const TS = 32, MW = HW, MH = HH;   // 테마 타일이 32px 이다 — 1:1 로 그린다
 // SPUM 월드 유닛 배율. 런타임 허용 0.035~0.35 (넘기면 잘린다).
 // 0.055 는 한 칸에 딱 맞지만 너무 작아 얼굴이 안 보였다.
-// 0.12 면 세로 두 칸쯤 — 방 안에서 캐릭터가 또렷하게 읽힌다.
-const UNIT_SCALE = 0.12;
+// 타일이 32px 로 커졌으니 배율도 같이 올린다 (24px 때 0.12 = 32px 때 0.16).
+const UNIT_SCALE = 0.16;
 let bubbles = {};
 
 // 플레이어는 캐스트 6종 가운데 하나다. 고양이는 없앴다.
@@ -844,7 +845,7 @@ async function boot() {
   seatCast();
   await initSPUM();
   if (spumReady) {
-    spumRuntime.setViewport({ cssWidth: 960, cssHeight: 720, dpr: 1 });
+    spumRuntime.setViewport({ cssWidth: 1280, cssHeight: 960, dpr: 1 });
     spumRuntime.setRunning(true);
     // 첫 sync — 맵+캐릭터 데이터 전달. 런타임이 자체 rAF로 렌더링 시작.
     syncSPUM();

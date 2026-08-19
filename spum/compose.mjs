@@ -4,7 +4,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { surface } from './png.mjs';
 import { W, H, PROPS, ONWALL, PATCH, RUGS,
-         floorOf, isWall, isFence, isDoor, sizeOf, PASSABLE } from './house.mjs';
+         floorOf, isWall, isFence, isDoor, sizeOf, PASSABLE, at } from './house.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const inBox = (x, y) => ([x1, y1, x2, y2]) => x >= x1 && x <= x2 && y >= y1 && y <= y2;
@@ -42,8 +42,14 @@ export function composeHouse(Z = 1, { shadows = true } = {}) {
     sf.wash(bx, by, t, bh, '#7A6A4E', 0.55); sf.wash(bx + bw - t, by, t, bh, '#7A6A4E', 0.55);
   });
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-    if (isWall(x, y)) stamp(isFence(x, y) ? 'fence' : 'house_wall', x, y);
-    else if (isDoor(x, y)) stamp('wooden_door', x, y);
+    if (isWall(x, y)) {
+      if (isFence(x, y)) { stamp('fence', x, y); continue; }
+      // 남쪽이 벽이 아니면 벽의 앞면이 보인다 — 두께가 생긴다.
+      const below = at(x, y + 1);
+      const openBelow = below !== '#';
+      const outer = openBelow && (below === '.' || below === ',');
+      stamp(openBelow ? (outer ? 'house_wall_face_stone' : 'house_wall_face') : 'house_wall', x, y);
+    } else if (isDoor(x, y)) stamp('wooden_door', x, y);
   }
   if (shadows) for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     if (!isWall(x, y - 1) || isWall(x, y) || isDoor(x, y)) continue;

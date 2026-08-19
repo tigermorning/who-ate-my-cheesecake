@@ -98,7 +98,8 @@ async function main() {
 
   const shots = path.join(DIR, 'screenshots');
   fs.mkdirSync(shots, { recursive: true });
-  await page.screenshot({ path: path.join(shots, '03-step5.png') });
+  await page.screenshot({ path: path.join(shots, '03-step5.png'), fullPage: true });
+  await page.locator('#stage').screenshot({ path: path.join(shots, '04-map.png') });
   console.log('[step5] 스크린샷: screenshots/03-step5.png');
 
   if (CLOSE_AT_END) { await context.close(); console.log('[step5] 닫았다.'); }

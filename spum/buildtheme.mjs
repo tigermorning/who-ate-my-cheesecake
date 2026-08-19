@@ -15,11 +15,11 @@ import { W, H, at, roomOf, isWall, isFence, isDoor, buildBlocked } from './house
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const Z = 2;                       // 한 칸 32px — Studio 맵 기본 칸 크기
-const COLS = 16;
+const COLS = 20;                   // 16 열이면 256칸이 한도라 그림자를 못 구웠다
 
-// 그림자를 굽지 않는다. 벽 밑 그림자를 넣으면 고유 타일이 306개로 불어나
-// 테마 한 장(16×16=256)에 안 들어간다. 게임 화면(play.html)은 그림자를 직접 그린다.
-const { sf, TS } = composeHouse(Z, { shadows: false });
+// 그림자를 굽는다. 벽 밑 그림자가 있어야 집이 입체로 읽힌다.
+// 고유 타일이 300개 남짓으로 늘어나므로 시트를 20열로 넓혔다.
+const { sf, TS } = composeHouse(Z, { shadows: true });
 
 const cellKey = (cx, cy) => {
   let s = '';

@@ -149,14 +149,42 @@ T('shed_floor', '헛간 바닥', c => {
 });
 
 // ══ 벽 · 문 · 창 ════════════════════════════════════════════
+// 위에서 내려다본 벽의 윗면. 바닥(크림·나무)과 확실히 구분되는 회갈색 회벽으로 간다 —
+// 예전엔 바닥과 같은 크림색이라 방 경계가 안 보였다.
 def('house_wall', {
   name: '집 벽', cat: 'solid', layer: 'front', block: true, cols: 1, rows: 1, draw: c => {
-    c.rect(0, 0, 16, 16, '#F4EAD6');
-    c.rect(0, 0, 16, 2, '#E2D4B8');
-    c.rect(0, 2, 16, 10, '#FBF4E4');
-    c.rect(0, 12, 16, 3, '#E8DCC2');
-    c.rect(0, 15, 16, 1, '#CDBB9A');
-    c.speck(0, 3, 16, 8, '#FFFBF0', 5, 2);
+    c.rect(0, 0, 16, 16, '#CBB99A');
+    c.rect(0, 0, 16, 2, '#E4D6BA');          // 윗면 하이라이트
+    c.rect(0, 2, 16, 12, '#C5B294');
+    c.speck(0, 3, 16, 10, '#D2C1A4', 6, 2);
+    c.rect(0, 14, 16, 2, '#9E8A6C');         // 아래 모서리 — 두께가 읽힌다
+    c.rect(0, 0, 1, 16, '#B9A688'); c.rect(15, 0, 1, 16, '#B9A688');
+  },
+});
+// 남쪽이 트인 벽 — 벽의 「앞면」이 보인다. 이게 있어야 집이 납작해 보이지 않는다.
+def('house_wall_face', {
+  name: '집 벽(앞면)', cat: 'solid', layer: 'front', block: true, cols: 1, rows: 1, draw: c => {
+    c.rect(0, 0, 16, 5, '#D8C7A6');            // 벽 윗면 — 위에서 내려다본 두께
+    c.rect(0, 0, 16, 1, '#EADCC2');
+    c.rect(0, 4, 16, 1, '#A8946F');
+    c.rect(0, 5, 16, 9, '#F3EADA');            // 앞면 — 빛을 받는다
+    c.rect(0, 5, 16, 1, '#FCF6EA');
+    c.speck(0, 6, 16, 7, '#E8DCC6', 6, 2);
+    c.rect(0, 13, 16, 2, '#C6B18C');           // 굽도리
+    c.rect(0, 15, 16, 1, '#9C8461');
+  },
+});
+// 바깥벽 앞면 — 참조 그림처럼 아래를 돌로 받친다
+def('house_wall_face_stone', {
+  name: '집 바깥벽(앞면)', cat: 'solid', layer: 'front', block: true, cols: 1, rows: 1, draw: c => {
+    c.rect(0, 0, 16, 5, '#D8C7A6');
+    c.rect(0, 0, 16, 1, '#EADCC2');
+    c.rect(0, 4, 16, 1, '#A8946F');
+    c.rect(0, 5, 16, 6, '#F3EADA');
+    c.rect(0, 11, 16, 5, '#BFBAB0');           // 돌 기단
+    c.rect(0, 11, 16, 1, '#D6D2C8');
+    [[1, 12], [6, 12], [11, 12], [3, 14], [9, 14]].forEach(([x, y]) => c.rect(x, y, 4, 1, '#AAA49A'));
+    c.rect(0, 15, 16, 1, '#8F897E');
   },
 });
 def('fence', {

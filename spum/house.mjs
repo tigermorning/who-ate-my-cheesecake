@@ -257,12 +257,12 @@ export const ONWALL = [
 
 // ── 서 있는 자리 ────────────────────────────────────────────
 export const SPOT = {
-  sgn_haru:  { room: '부엌', x: 12, y: 8 },
-  sgn_mina:  { room: '서재', x: 26, y: 22 },
+  sgn_haru:  { room: '부엌', x: 11, y: 7 },
+  sgn_mina:  { room: '서재', x: 25, y: 21 },
   sgn_coco:  { room: '텃밭', x: 34, y: 20 },
   sgn_lulu:  { room: '거실', x: 25, y: 10 },
-  sgn_peach: { room: '데크', x: 4, y: 13 },
-  sgn_ruby:  { room: '식당', x: 12, y: 16 },
+  sgn_peach: { room: '데크', x: 3, y: 14 },
+  sgn_ruby:  { room: '식당', x: 12, y: 17 },
   player:    { room: '복도', x: 20, y: 22 },
 };
 

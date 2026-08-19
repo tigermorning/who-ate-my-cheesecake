@@ -185,8 +185,12 @@ function normalizeSamBody(raw) {
   }
 
   // ── SPUM CDN 프록시 — CORS 없이 SPUM 모듈 로드 ─────────────
-  if (url.pathname.startsWith('/spum-cdn/')) {
-    const cdnPath = url.pathname.replace('/spum-cdn/', '/');
+  // SPUM 캐릭터 프리뷰는 SPKG 경로를 문서 기준 상대경로('../assets/…')로 푼다.
+  // 그래서 /assets/ 로 떨어진다 — CDN 의 같은 자리로 넘겨 준다.
+  if (url.pathname.startsWith('/assets/') || url.pathname.startsWith('/spum-cdn/')) {
+    const cdnPath = url.pathname.startsWith('/assets/')
+      ? url.pathname
+      : url.pathname.replace('/spum-cdn/', '/');
     const cdnUrl = SPUM_CDN + cdnPath;
     try {
       const up = await fetch(cdnUrl, { redirect: 'follow' });
