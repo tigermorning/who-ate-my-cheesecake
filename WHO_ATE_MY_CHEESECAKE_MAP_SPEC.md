@@ -5,6 +5,8 @@
 Rebuild the supplied reference image as a bright, cozy, spacious
 **single-story 3/4 top-down 2D game map**.
 
+Reference image: [`docs/reference-house.png`](docs/reference-house.png)
+
 Non-negotiable: - Bright daytime; cozy does NOT mean dark. - No bedroom,
 no second floor, no greenhouse. - Large open living room with a
 prominent fireplace. - Kitchen must have a large, clearly visible
