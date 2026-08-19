@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>SPUM Runtime Test</title>
+  <style>
+    body { margin: 0; background: #1a1a2e; color: #eee; font-family: monospace; }
+    #log { padding: 12px; font-size: 13px; line-height: 1.6; }
+    .ok { color: #4ade80; }
+    .fail { color: #f87171; }
+    .info { color: #60a5fa; }
+    canvas { display: block; border: 1px solid #333; }
+  </style>
+</head>
+<body>
+  <div id="log"></div>
+  <canvas id="c" width="960" height="720"></canvas>
+  <script type="module">
+    const log = document.getElementById('log');
+    function msg(cls, text) {
+      const d = document.createElement('div');
+      d.className = cls;
+      d.textContent = text;
+      log.appendChild(d);
+      console.log(text);
+    }
+
+    try {
+      msg('info', 'Loading SPUM Engine...');
+      const engine = await import('/spum-cdn/packages/spum-engine/index.js');
+      msg('ok', 'Engine loaded: ' + Object.keys(engine).join(', '));
+
+      msg('info', 'Loading SPUM Extensions (pathfinding)...');
+      const ext = await import('/spum-cdn/packages/spum-engine/extensions/index.js');
+      msg('ok', 'Extensions loaded: ' + Object.keys(ext).join(', '));
+
+      msg('info', 'Loading SPUM World Runtime...');
+      const world = await import('/spum-cdn/packages/spum-world/runtime/StudioSpumWorldRuntime.js');
+      msg('ok', 'World loaded: ' + Object.keys(world).join(', '));
+
+      msg('info', 'Loading DummyConversation...');
+      const dummy = await import('/spum-cdn/packages/spum-world/runtime/DummyConversation.js');
+      msg('ok', 'DummyConversation loaded: ' + Object.keys(dummy).join(', '));
+
+      msg('info', 'Loading WorldLLMConversation...');
+      const llm = await import('/spum-cdn/packages/spum-world/runtime/WorldLLMConversation.js');
+      msg('ok', 'WorldLLMConversation loaded: ' + Object.keys(llm).join(', '));
+
+      // Try to create a minimal runtime
+      msg('info', 'Attempting to create StudioSpumWorldRuntime...');
+      const canvas = document.getElementById('c');
+      const runtime = world.createStudioSpumWorldRuntime({
+        canvas,
+        log: (msg) => console.log('[SPUM]', msg),
+      });
+      msg('ok', 'Runtime created!');
+
+      if (runtime && runtime.engine) {
+        msg('ok', 'Engine instance: ' + typeof runtime.engine);
+        msg('ok', 'Scene: ' + typeof runtime.scene);
+        msg('ok', 'Camera: ' + typeof runtime.camera);
+      }
+
+    } catch (e) {
+      msg('fail', 'ERROR: ' + e.message);
+      msg('fail', e.stack);
+    }
+  </script>
+</body>
+</html>

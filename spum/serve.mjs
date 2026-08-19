@@ -69,6 +69,8 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; cha
   '.mjs': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8',
   '.png': 'image/png', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml' };
 
+const SPUM_CDN = 'https://spum.soonsoon.ai';
+
 const readBody = req => new Promise(res => { let b = ''; req.on('data', c => b += c); req.on('end', () => res(b)); });
 
 const server = http.createServer(async (req, res) => {
@@ -103,7 +105,8 @@ const server = http.createServer(async (req, res) => {
   }
 
   // ── SAM 대리 호출. 키는 서버에서만 붙인다 ──────────────────
-  if (url.pathname === '/api/sam/generate' && req.method === 'POST') {
+  // SPUM 런타임은 /api/sam/v1/generate 를 사용한다
+  if ((url.pathname === '/api/sam/generate' || url.pathname === '/api/sam/v1/generate') && req.method === 'POST') {
     const body = await readBody(req);
     if (!SAM_KEY) {
       // 키가 없으면 로그인된 SPUM 탭(다리)에게 부탁한다
@@ -136,6 +139,27 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/api/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ sam: SAM_KEY ? 'ready' : (jobs ? 'bridge' : 'missing'), base: SAM_BASE }));
+  }
+
+  // ── SPUM CDN 프록시 — CORS 없이 SPUM 모듈 로드 ─────────────
+  if (url.pathname.startsWith('/spum-cdn/')) {
+    const cdnPath = url.pathname.replace('/spum-cdn/', '/');
+    const cdnUrl = SPUM_CDN + cdnPath;
+    try {
+      const up = await fetch(cdnUrl, { redirect: 'follow' });
+      const data = await up.arrayBuffer();
+      const ext = path.extname(cdnPath).toLowerCase();
+      const ct = MIME[ext] || 'application/javascript';
+      res.writeHead(up.status, {
+        'Content-Type': ct,
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'public, max-age=3600',
+      });
+      return res.end(Buffer.from(data));
+    } catch (e) {
+      res.writeHead(502, { 'Content-Type': 'text/plain' });
+      return res.end('CDN proxy error: ' + (e.message || e));
+    }
   }
 
   // ── 정적 파일 ─────────────────────────────────────────────

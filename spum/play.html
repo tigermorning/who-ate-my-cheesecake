@@ -124,6 +124,74 @@ import { buildMessages, violations, classifyIntent, MODEL } from './dialogue.mjs
 import { W as HW, H as HH, SPOT, ZONES, roomOf } from './house.mjs';
 import { loadSpumMap } from './spummap.mjs';
 
+// ── SPUM 월드 런타임 ────────────────────────────────────────
+let spumRuntime = null;
+let spumReady = false;
+
+async function initSPUM() {
+  try {
+    const worldMod = await import('/spum-cdn/packages/spum-world/runtime/StudioSpumWorldRuntime.js');
+    const canvas = $('#scene');
+    spumRuntime = worldMod.createStudioSpumWorldRuntime({
+      canvas,
+      log: (level, msg, data) => console.log('[SPUM]', level, msg, data || ''),
+    });
+    spumReady = true;
+    console.log('[SPUM] Runtime created');
+  } catch (e) {
+    console.warn('[SPUM] Failed to load runtime:', e.message);
+    spumReady = false;
+  }
+}
+
+function syncSPUM() {
+  if (!spumRuntime || !spumMap) return;
+  // 그리드 데이터: SPUM 형식 {width, height, tileSize, grid: Uint8Array}
+  const gridData = {
+    width: MW,
+    height: MH,
+    tileSize: TS,
+    grid: spumObstacle,
+    signature: `house-${MW}x${MH}`,
+  };
+  // 캐스트 데이터: SPUM 형식 (instanceId + characterId + tile 좌표)
+  const castEntries = CAST.filter(c => !c.isPlayer).map(c => {
+    const s = npcState[c.id];
+    return {
+      instanceId: c.id,
+      characterId: c.id,
+      spawnX: s?.gx ?? SPOT[c.id].x,
+      spawnY: s?.gy ?? SPOT[c.id].y,
+    };
+  });
+  // characterLookup: SPUM이 캐릭터 장비를 찾을 때 호출
+  const characterLookup = (characterId) => {
+    const equip = CHARACTER_EQUIP[characterId];
+    if (!equip) return null;
+    return {
+      id: characterId,
+      name: SPRITE[characterId] || characterId,
+      equipment: equip,
+    };
+  };
+  spumRuntime.sync({
+    grid: gridData,
+    cast: castEntries,
+    characterLookup,
+    shouldRun: true,
+    unitScale: 1,
+  });
+}
+
+const CHARACTER_EQUIP = {
+  sgn_deer:     { body: 'elf_1', helmet: 'elf_helmet_06' },
+  sgn_horse:    { body: 'human_1', helmet: 'elf_helmet_12' },
+  sgn_penguin:  { body: 'elf_1', helmet: 'elf_helmet_17' },
+  sgn_rabbit:   { body: 'human_4', helmet: 'legacy_f_sr_helmet' },
+  sgn_chestnut: { body: 'human_3', helmet: 'legacy_helmet_1' },
+  sgn_bull:     { body: 'human_2', helmet: 'legacy_helmet_6' },
+};
+
 const $ = s => document.querySelector(s);
 const el = (t, c, x) => { const e = document.createElement(t); if (c) e.className = c; if (x != null) e.textContent = x; return e; };
 
@@ -165,6 +233,13 @@ async function boot() {
   const obsLayer = spumMap.obstacle;
   spumObstacle = new Uint8Array(obsLayer);
   mapLayer = buildMapLayer();
+  // SPUM 월드 런타임 초기화
+  await initSPUM();
+  if (spumReady) {
+    const cv = $('#scene');
+    spumRuntime.setViewport({ cssWidth: cv.width, cssHeight: cv.height, dpr: 1 });
+    spumRuntime.setRunning(true);
+  }
   $('#scene').addEventListener('click', sceneClick);
   await Promise.all(Object.entries(SPRITE).map(async ([id, ko]) => {
     const meta = await (await fetch(`./sprites/${ko}-idle-sheet.json`)).json();
@@ -237,6 +312,8 @@ function tick(now = performance.now()) {
     g.drawImage(sh.img, (f % sh.cols) * sh.fw, Math.floor(f / sh.cols) * sh.fh, sh.fw, sh.fh, bx, by, S, S);
     drawSpecies(g, id, bx, by, S, S);
   });
+  // SPUM 런타임 상태 동기화
+  if (spumReady) syncSPUM();
   drawScene();
   requestAnimationFrame(tick);
 }
