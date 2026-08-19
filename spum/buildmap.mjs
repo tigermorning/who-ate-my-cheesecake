@@ -1,79 +1,108 @@
-// house.mjs 의 도면을 SPUM Studio Map 으로 뽑는다.
-//   node spum/buildmap.mjs > spum/house-map.json
+// 도면을 진짜 SPUM Studio 맵으로 뽑는다.
+//   node spum/buildtheme.mjs && node spum/buildmap.mjs > spum/house-map.json
+//
+// SPUM 맵의 규칙 (실계정 데이터로 확인):
+//  · 맵은 라이브러리에 있는 SMO 를 바로 그리지 못한다. `tilesets[]` 에
+//    source:"map-theme" 로 등록된 타일만 그린다.
+//  · 레이어는 평탄 배열이고 값은 packed 타일 ID. 인덱스는 row*width+col, 0 은 빈 칸.
+//  · tileIdBase 는 2048 칸 블록 — builtin 1, 첫 테마 2049, 그다음 4097.
+//  · objects[] 는 SMO 배치가 아니라 사각형 주석이다. 그래서 방 이름표로 쓴다.
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { W, H, ZONES, PATCH, RUGS, PROPS, ONWALL, SPOT, LANDMARKS,
-         roomOf, floorOf, isWall, isFence, isDoor, sizeOf, PASSABLE, buildBlocked } from './house.mjs';
+import { W, H, ZONES, SPOT, LANDMARKS, roomOf } from './house.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const smo = JSON.parse(readFileSync(join(__dirname, 'smo.json'), 'utf8'));
-const byKey = Object.fromEntries(smo.map(o => [o.key, o]));
+const theme = JSON.parse(readFileSync(join(__dirname, 'house-theme.json'), 'utf8'));
 
-const idx = (x, y) => y * W + x;
-const blocked = buildBlocked();
-const inBox = (x, y) => ([x1, y1, x2, y2]) => x >= x1 && x <= x2 && y >= y1 && y <= y2;
+const THEME_SMO_ID = 'SMO_CHZ_THEME_HOUSE';
+const THEME_NAME = 'Who Ate My Cheesecake? · 집';
+const BASE = 2049;                                  // 첫 커스텀 테마 블록
+const now = new Date().toISOString();
 
-// 바닥 SMO 키마다 번호를 하나씩 준다 — 타일셋 없이 SMO 자체가 타일이다
-const terrainKeys = smo.filter(o => o.layerHint === 'back').map(o => o.key);
-const backId = Object.fromEntries(terrainKeys.map((k, i) => [k, i + 1]));
+// ── 타일 속성: packed ID → 이 타일이 무엇인지 ──────────────
+const tileProperties = {};
+theme.tiles.forEach((t, i) => {
+  tileProperties[String(BASE + i)] = {
+    smoThemeId: THEME_SMO_ID, smoThemeName: THEME_NAME,
+    smoTileId: t.tileId, name: t.name, category: t.category,
+    movement: t.movement, interaction: t.interaction,
+    blocksMovement: t.blocksMovement, blocksVision: t.blocksVision,
+    moveSpeed: t.moveSpeed,
+    sourceCell: t.sourceCell, sourceCells: [t.sourceCell],
+  };
+});
 
-const back = new Array(W * H).fill(0);
+// ── 레이어 ──────────────────────────────────────────────────
+const back = theme.layer.map(i => BASE + i);        // 집 한 채가 통째로 여기 들어간다
 const front = new Array(W * H).fill(0);
-const walk = new Array(W * H).fill(0);
-const block = new Array(W * H).fill(0);
+const { walkable, obstacle } = theme;
 
-for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-  const i = idx(x, y);
-  const pt = PATCH.find(inBox(x, y));
-  const rug = RUGS.find(inBox(x, y));
-  back[i] = backId[rug ? rug[4] : (pt ? pt[4] : floorOf(x, y))] || backId.grass;
-  if (isWall(x, y)) front[i] = isFence(x, y) ? 2 : 1;   // 1 = 집 벽, 2 = 울타리
-  if (blocked[i]) block[i] = 1; else walk[i] = 1;
+// ── 방 이름표: 방마다 칸을 큰 사각형으로 쪼개 주석으로 남긴다 ──
+function rectsOf(name) {
+  const left = new Set();
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (roomOf(x, y) === name) left.add(y * W + x);
+  const out = [];
+  while (left.size) {
+    const first = Math.min(...left);
+    const x0 = first % W, y0 = Math.floor(first / W);
+    let w = 0; while (left.has(y0 * W + x0 + w)) w++;
+    let h = 1;
+    for (;;) {
+      let full = true;
+      for (let i = 0; i < w; i++) if (!left.has((y0 + h) * W + x0 + i)) { full = false; break; }
+      if (!full) break;
+      h++;
+    }
+    for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) left.delete((y0 + j) * W + x0 + i);
+    out.push({ col: x0, row: y0, width: w, height: h });
+  }
+  return out;
 }
-
-// 놓인 것 — SPUM 오브젝트로 그대로 나간다
-const objects = [];
-const push = (p, layer) => {
-  const o = byKey[p.key];
-  if (!o) return;
-  const [cw, ch] = sizeOf(p.key);
-  objects.push({
-    id: `OBJ_${p.key}_${p.x}_${p.y}`,
-    objectId: o.id, key: p.key, name: o.name,
-    x: p.x, y: p.y, width: cw, height: ch,
-    layer, z: p.y + ch - 1 + (p.on ? 0.5 : 0),
-    blocksMovement: !p.on && !PASSABLE.has(p.key),
-    room: roomOf(p.x, p.y) || '뜰',
-    interaction: o.interaction,
-  });
+const ROOM_COLOR = {
+  부엌: '#E8C88A', 식당: '#D9A468', 욕실: '#9FC7DA', 거실: '#E0B07A', 서재: '#B79A6E',
+  복도: '#CFC0A0', 데크: '#C08B4E', 운동장: '#9BA2A8', 텃밭: '#7C5734', 헛간: '#AC8B5F',
+  현관앞: '#D1CAB6',
 };
-for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-  if (isWall(x, y)) push({ key: isFence(x, y) ? 'fence' : 'house_wall', x, y }, 'front');
-  else if (isDoor(x, y)) push({ key: 'wooden_door', x, y }, 'front');
-}
-PROPS.forEach(p => push(p, 'front'));
-ONWALL.forEach(p => push(p, 'front'));
-objects.sort((a, b) => a.z - b.z);
+const objects = [];
+Object.keys(ROOM_COLOR).forEach(name => {
+  rectsOf(name).forEach((r, i) => objects.push({
+    id: `ROOM_${name}_${i}`, name, tags: ['room', name],
+    description: `${name} — 어젯밤 여기 있었다고 말할 수 있는 자리`,
+    rect: r, color: ROOM_COLOR[name],
+  }));
+});
 
+// ── 자리 ────────────────────────────────────────────────────
 const spawnPoints = [
-  ...ZONES.map(z => ({ id: 'spawn_' + z.name, name: z.name, x: z.x, y: z.y, tags: ['room'] })),
+  ...ZONES.map(z => ({ id: 'label_' + z.name, name: z.name, x: z.x, y: z.y, tags: ['room', 'label'] })),
   ...Object.entries(SPOT).map(([id, s]) => ({ id: 'start_' + id, name: id, x: s.x, y: s.y, tags: ['actor', s.room] })),
   ...LANDMARKS.map(L => ({ id: 'spot_' + L.name, name: L.name, x: L.x, y: L.y, tags: ['landmark'] })),
 ];
 
-const now = new Date().toISOString();
 console.log(JSON.stringify({
-  id: 'MAP_cheesecake_house', name: 'Who Ate My Cheesecake? · House',
+  id: 'MAP_cheesecake_house', name: THEME_NAME,
   description: '단층집 한 채와 뜰. 부엌·식당·욕실·거실·서재가 복도 하나로 이어지고, 뜰에 데크·운동장·텃밭·헛간이 있다.',
-  version: 3, width: W, height: H, tileSize: 24,
-  tileSetAssetId: '', mapThemeId: '', savedAt: now,
+  version: 3, width: W, height: H, tileSize: theme.tileSize,
+  tileSetAssetId: 'theme_' + THEME_SMO_ID, mapThemeId: THEME_SMO_ID, savedAt: now,
   layers: [
-    { name: 'back_1', type: 'back', label: '바닥', data: back, legend: backId },
-    { name: 'front_1', type: 'front', label: '벽', data: front },
-    { name: 'walkable', type: 'walkable', label: '', data: walk },
-    { name: 'obstacle', type: 'obstacle', label: '', data: block },
+    { name: 'back_1', type: 'back', label: '집', data: back },
+    { name: 'front_1', type: 'front', label: '위', data: front },
+    { name: 'walkable', type: 'walkable', label: '', data: walkable },
+    { name: 'obstacle', type: 'obstacle', label: '', data: obstacle },
   ],
-  objects, ruleTiles: {}, tilesets: [], spawnPoints,
-  meta: { createdAt: now, updatedAt: now, tags: ['치즈케이크'], objectSource: 'spum/smo.json' },
+  objects, ruleTiles: {},
+  tilesets: [
+    { id: 'builtin_tp_tile01', name: 'TP_Tile01', kind: 'builtin',
+      imageUrl: 'https://spum.soonsoon.ai/assets/TP_Tile01.png', source: '', themeId: '', themeName: '',
+      tileProperties: {}, tileIdBase: 1, tileWidth: 32, tileHeight: 32, tiles: [], columns: 0,
+      createdAt: '', updatedAt: '' },
+    { id: 'theme_' + THEME_SMO_ID, name: THEME_NAME, kind: 'custom',
+      imageUrl: '', source: 'map-theme', themeId: THEME_SMO_ID, themeName: THEME_NAME,
+      tileProperties, tileIdBase: BASE, tileWidth: theme.tileSize, tileHeight: theme.tileSize,
+      tiles: [], columns: theme.columns, createdAt: now, updatedAt: now },
+  ],
+  spawnPoints,
+  meta: { createdAt: now, updatedAt: now, tags: ['치즈케이크'],
+          themeSheet: 'house-theme.png', themeTiles: theme.count },
 }));

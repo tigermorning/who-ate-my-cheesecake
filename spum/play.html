@@ -30,6 +30,7 @@ header.top{display:flex;align-items:center;gap:14px;margin-bottom:14px}
 .who{display:flex;align-items:center;gap:10px;padding:8px;border-radius:14px;cursor:pointer;border:1.5px solid transparent}
 .who:hover{background:var(--cream)}
 .who.on{background:var(--cream-2);border-color:var(--accent-2)}
+.who.near{border-color:var(--good);background:rgba(123,178,106,.08)}
 .who .sp{width:56px;height:56px;image-rendering:pixelated;background-repeat:no-repeat;flex:0 0 auto}
 .who b{display:block;font-size:15px}
 .who span{font-size:12px;color:var(--ink-soft)}
@@ -74,8 +75,10 @@ dialog::backdrop{background:rgba(60,40,25,.45)}
   <header class="top">
     <div class="logo">Who Ate My Cheesecake?<small>SPUM · SAM</small></div>
     <div class="chip">
+      <span class="pill" id="pillTime">시간 21시</span>
       <span class="pill" id="pillTalk">대화 0</span>
       <span class="pill" id="pillLLM">…</span>
+      <button id="btnNextHour"> 다음 시각 ▶</button>
       <button id="btnNew">새 판</button>
       <button class="primary" id="btnAccuse">지목하기</button>
     </div>
@@ -118,18 +121,19 @@ dialog::backdrop{background:rgba(60,40,25,.45)}
 <script type="module">
 import { makeRound, knowledgeOf, nameOf, ROOMS, HOURS, CAST } from './round.mjs';
 import { buildMessages, violations, classifyIntent, MODEL } from './dialogue.mjs';
-import { W as HW, H as HH, PATCH, RUGS, PROPS, ONWALL, SPOT, ZONES, PASSABLE,
-         roomOf, floorOf, isDoor, isWall, isFence, sizeOf, buildBlocked } from './house.mjs';
+import { W as HW, H as HH, SPOT, ZONES, roomOf } from './house.mjs';
+import { loadSpumMap } from './spummap.mjs';
 
 const $ = s => document.querySelector(s);
 const el = (t, c, x) => { const e = document.createElement(t); if (c) e.className = c; if (x != null) e.textContent = x; return e; };
 
-const SPRITE = { sgn_kyle: '카일', sgn_mira: '미라', sgn_dorn: '도른', sgn_howell: '하웰', sgn_ben: '벤' };
+const SPRITE = { sgn_deer: '사슴', sgn_horse: '적토마', sgn_penguin: '펭귄', sgn_rabbit: '토끼', sgn_chestnut: '밤톨이', sgn_bull: '황소' };
 
 // ── 집 그리기 재료 ──────────────────────────────────────────
-// 바닥·벽·가구 전부 SPUM 오브젝트(smo.json)다. 타일시트는 쓰지 않는다.
-const smoImg = {};       // key → 캔버스 (그림 한 칸 16px)
+// 바닥·벽·가구 전부 SPUM 맵(house-map.json + house-theme.png)에서 온다.
 let mapLayer = null;     // 미리 그려 둔 집 — 사람만 그 위에 얹는다
+let spumMap = null;      // SPUM 맵 로드 결과
+let spumObstacle = null; // SPUM obstacle 레이어 (Uint8Array)
 const sheets = {};       // id → {img, cols, fw, fh, frames}
 let world = [], round = null, cur = null, talks = 0, budget = 18;
 const SCALE = {};   // 종마다 덩치가 다르다 — 곰은 크고 다람쥐는 작다
@@ -138,6 +142,14 @@ const board = {};        // id → hour → [{room, kind, by}]
 const topic = {};        // id → {hour, room, person} — 연속 대화 주제
 const discovered = {};   // id → Set — 플레이어가 이미 발견한 "시각|장소" 쌍
 let llmReady = false;
+
+// ── 게임 시계 ─────────────────────────────────────────────────
+let currentHourIndex = 0;        // 0=21시, 1=22시, ... 5=02시
+let hourTimer = 0;
+const HOUR_INTERVAL = 2700;     // 45초마다 시각 진행 (60fps 기준)
+// 방 이름 → ZONES 좌표 (방 이름으로 격자 좌표 찾기)
+const ROOM_POS = {};
+ZONES.forEach(z => { ROOM_POS[z.name] = { x: z.x, y: z.y }; });
 
 // ── 준비 ────────────────────────────────────────────────────
 async function boot() {
@@ -148,18 +160,10 @@ async function boot() {
   const h = await fetch('/api/health').then(r => r.json()).catch(() => ({ sam: 'missing' }));
   llmReady = h.sam === 'ready' || h.sam === 'bridge';
   $('#pillLLM').textContent = h.sam === 'ready' ? 'SAM · claude-sonnet-4.6' : (h.sam === 'bridge' ? 'SAM · 로그인 다리' : 'SAM 없음 · 간이모드');
-  // 집을 이루는 SPUM 오브젝트를 전부 그림으로 만든다
-  const smo = await (await fetch('./smo.json')).json();
-  for (const o of smo) {
-    const { width: w, height: h, pixels } = o.visual;
-    const c = document.createElement('canvas'); c.width = w; c.height = h;
-    const g = c.getContext('2d');
-    for (let i = 0; i < pixels.length; i++) {
-      const hex = pixels[i]; if (!hex) continue;
-      g.fillStyle = hex; g.fillRect(i % w, (i / w) | 0, 1, 1);
-    }
-    smoImg[o.key] = c;
-  }
+  // SPUM 맵 로드 — 화면은 SPUM 산출물만 본다
+  spumMap = await loadSpumMap('./');
+  const obsLayer = spumMap.obstacle;
+  spumObstacle = new Uint8Array(obsLayer);
   mapLayer = buildMapLayer();
   $('#scene').addEventListener('click', sceneClick);
   await Promise.all(Object.entries(SPRITE).map(async ([id, ko]) => {
@@ -174,16 +178,38 @@ async function boot() {
 
 function newRound() {
   round = makeRound((Math.random() * 2147483000) | 0);
-  talks = 0; cur = null;
+  talks = 0; cur = null; currentHourIndex = 0; hourTimer = 0;
   CAST.forEach(c => { chat[c.id] = []; board[c.id] = {}; topic[c.id] = {}; });
   Object.keys(discovered).forEach(k => delete discovered[k]);
-  renderRoster(); renderBoard(); renderLog();
+  // NPC를 첫 시각(21시)의 방으로 배치
+  CAST.filter(c => !c.isPlayer).forEach(c => {
+    const room = round.paths[c.id][0];
+    if (room && ROOM_POS[room]) {
+      const pos = roomToGrid(room);
+      if (pos) {
+        npcState[c.id].gx = pos.x; npcState[c.id].gy = pos.y;
+        npcState[c.id].px = pos.x * TS; npcState[c.id].py = pos.y * TS;
+        SPOT[c.id].room = room;
+      }
+    }
+  });
+  renderRoster(); renderBoard(); renderLog(); renderTimeDisplay();
   const me = knowledgeOf(round, 'player');
   $('#myrole').innerHTML = me.isCulprit
-    ? '<b>너다.</b> 어젯밤 케이크를 먹은 건 너다. 아침까지 들키지 마라.<br><span class="note">네 방패: “' + me.shield.line + '”</span>'
-    : '넌 안 먹었다. <b>진짜 먹은 하나</b>를 찾아라.<br><span class="note">네 방패: “' + me.shield.line + '”</span>';
+    ? '<b>너다.</b> 어젯밤 케이크를 먹은 건 너다. 아침까지 들키지 마라.<br><span class="note">네 방패: "'
+ + me.shield.line + '"</span>'
+    : '넌 안 먹었다. <b>진짜 먹은 하나</b>를 찾아라.<br><span class="note">네 방패: "' + me.shield.line + '"</span>';
   say(null, '아침이다. 냉장고 앞에 빈 접시만 덩그러니 놓여 있다. 어젯밤 집 안에는 여섯뿐이었다.');
 }
+
+// ── 시간 표시 ──────────────────────────────────────────────────
+function renderTimeDisplay() {
+  const el = $('#pillTime');
+  if (!el || !round) return;
+  el.textContent = `시간 ${HOURS[currentHourIndex]}`;
+}
+// 시간 수동 진행 버튼
+$('#btnNextHour').addEventListener('click', () => { advanceHour(); });
 
 // ── 그리기 ──────────────────────────────────────────────────
 function spriteStyle(id, size, frame) {
@@ -200,6 +226,8 @@ function tick(now = performance.now()) {
   const dt = (now - lastTick) / 16.667; lastTick = now;
   updatePlayer(dt);
   updateNPCs(dt);
+  updateProximity();
+  proximityPulse = (proximityPulse + dt * 0.05) % (Math.PI * 2);
   document.querySelectorAll('[data-thumb]').forEach(cv => {
     const id = cv.dataset.thumb, sh = sheets[id]; if (!sh) return;
     const g = cv.getContext('2d'); g.imageSmoothingEnabled = false;
@@ -216,10 +244,10 @@ function tick(now = performance.now()) {
 
 // ── 종 표식 — 귀·코·부리·꼬리를 직접 그린다 (에셋에 동물 부품이 없다) ──
 const SKIN = {
-  sgn_kyle:   { fur: '#FFB35C', dark: '#E07A2A', light: '#FFE6C4', line: '#4A2E18' }, // 호랑이
-  sgn_dorn:   { fur: '#C98A55', dark: '#8A5A32', light: '#F4CFA6', line: '#4A2E18' }, // 원숭이
-  sgn_howell: { fur: '#FFC2CE', dark: '#E38AA0', light: '#FFE1E8', line: '#5A3340' }, // 돼지
-  sgn_ben:    { fur: '#FFE066', dark: '#F2A93B', light: '#FFF3BF', line: '#5A4418' }, // 오리
+  sgn_deer:     { fur: '#C9A86C', dark: '#8B6914', light: '#F4D9A0', line: '#4A3510' }, // 사슴
+  sgn_penguin:  { fur: '#2F4F4F', dark: '#1C1C1C', light: '#FFFFFF', line: '#0A0A0A' }, // 펭귄
+  sgn_chestnut: { fur: '#D2691E', dark: '#8B4513', light: '#F4C990', line: '#3A1A08' }, // 곰
+  sgn_bull:     { fur: '#CD853F', dark: '#8B0000', light: '#FFB6A0', line: '#4A0000' }, // 황소
 };
 function blob(cx, path, fill, line, w) { cx.beginPath(); path(cx); cx.fillStyle = fill; cx.fill(); cx.strokeStyle = line; cx.lineWidth = w || 2; cx.stroke(); }
 function drawSpecies(cx, id, x, y, w, h) {
@@ -230,7 +258,7 @@ function drawSpecies(cx, id, x, y, w, h) {
   const lw = Math.max(1.5, w * 0.022);
   cx.lineJoin = 'round'; cx.lineCap = 'round';
 
-  if (id === 'sgn_kyle') {                                   // 호랑이 — 삼각 귀 · 이마 줄무늬 · 굵은 줄무늬 꼬리
+  if (id === 'sgn_deer') {                                   // 사슴 — 뿔 · 긴 귀 · 점박이 꼬리
     [-1, 1].forEach(function (d) {
       blob(cx, function (k) {
         k.moveTo(mx + d * hw * 0.55, headY - h * 0.055);
@@ -261,7 +289,7 @@ function drawSpecies(cx, id, x, y, w, h) {
     });
   }
 
-  if (id === 'sgn_dorn') {                                   // 원숭이 — 크고 둥근 옆 귀 · 길게 감긴 꼬리
+  if (id === 'sgn_penguin') {                                   // 펭귄 — 둥근 머리 · 부리 · 날개
     [-1, 1].forEach(function (d) {
       blob(cx, function (k) { k.arc(mx + d * hw * 1.35, headY - h * 0.02, w * 0.045, 0, 7); }, c.fur, c.line, lw);
       blob(cx, function (k) { k.arc(mx + d * hw * 1.35, headY - h * 0.02, w * 0.022, 0, 7); }, c.light, c.light, 1);
@@ -274,7 +302,7 @@ function drawSpecies(cx, id, x, y, w, h) {
     cx.strokeStyle = c.fur; cx.lineWidth = lw * 1.2; cx.stroke();
   }
 
-  if (id === 'sgn_howell') {                                 // 돼지 — 접힌 귀 · 들창코 · 돌돌 말린 꼬리
+  if (id === 'sgn_chestnut') {                                 // 곰 — 둥근 귀 · 큰 코 · 통통한 몸
     [-1, 1].forEach(function (d) {
       blob(cx, function (k) {
         k.moveTo(mx + d * hw * 0.6, headY - h * 0.055);
@@ -293,7 +321,7 @@ function drawSpecies(cx, id, x, y, w, h) {
     cx.strokeStyle = c.fur; cx.lineWidth = lw; cx.stroke();
   }
 
-  if (id === 'sgn_ben') {                                    // 오리 — 넓적 부리 · 머리깃 · 짧은 꽁지
+  if (id === 'sgn_bull') {                                    // 황소 — 뿔 · 넓은 코 · 짧은 꼬리
     blob(cx, function (k) {
       k.moveTo(mx - w * 0.055, headY + h * 0.005);
       k.quadraticCurveTo(mx, headY + h * 0.055, mx + w * 0.055, headY + h * 0.005);
@@ -316,7 +344,7 @@ function drawSpecies(cx, id, x, y, w, h) {
 
 // ── 집 그리기 ───────────────────────────────────────────────
 const TS = 24, TP = 16, MW = HW, MH = HH;   // 화면 한 칸 24px · 그림 한 칸 16px
-let blocked = null, bubbles = {};
+let bubbles = {};
 // ── 이동 시스템 ──────────────────────────────────────────────
 const playerGrid = { ...SPOT.player };
 const playerPx   = { x: SPOT.player.x * TS, y: SPOT.player.y * TS };
@@ -326,8 +354,8 @@ let moveTimer = 0; const MOVE_SPEED = 0.14;
 
 function isWalkable(x, y) {
   if (x < 0 || y < 0 || x >= MW || y >= MH) return false;
-  if (!blocked) blocked = buildBlocked();
-  return !blocked[y * MW + x];
+  if (!spumObstacle) return false;
+  return !spumObstacle[y * MW + x];
 }
 
 function findPath(sx, sy, ex, ey) {
@@ -405,15 +433,75 @@ window.addEventListener('keydown', e => {
       startPlayerMove(findPath(playerGrid.x, playerGrid.y, dest.x, dest.y));
     }
   }
+  // E키 — 근접 NPC와 대화 시작
+  if ((e.key === 'e' || e.key === 'E') && nearestNPC) {
+    cur = nearestNPC; renderRoster(); renderLog();
+    $('#say').focus();
+  }
 });
 
+// ── 근접 감지 ─────────────────────────────────────────────────
+const PROXIMITY = 2;  // 2칸 이내이면 근접
+let nearestNPC = null; // 가장 가까운 NPC id
+let proximityPulse = 0;
+
+function updateProximity() {
+  nearestNPC = null;
+  let minD = Infinity;
+  CAST.filter(c => !c.isPlayer).forEach(c => {
+    const s = npcState[c.id];
+    const d = Math.hypot(s.gx - playerGrid.x, s.gy - playerGrid.y);
+    if (d < PROXIMITY && d < minD) { minD = d; nearestNPC = c.id; }
+  });
+  // 자동 선택: 근접한 NPC가 있고, 아직 대화 중이 아니면 자동 선택
+  if (nearestNPC && !cur) { cur = nearestNPC; renderRoster(); renderLog(); }
+}
+
+// ── NPC 간 상호작용 — 같은 방에 있으면 정보 공유 ──────────────
+let lastShareHour = -1;
+function npcShareInfo() {
+  if (!round || currentHourIndex === lastShareHour) return;
+  lastShareHour = currentHourIndex;
+  // 같은 방에 있는 NPC 쌍을 찾는다
+  const npcList = CAST.filter(c => !c.isPlayer);
+  for (let i = 0; i < npcList.length; i++) {
+    for (let j = i + 1; j < npcList.length; j++) {
+      const a = npcList[i], b = npcList[j];
+      const roomA = roomOf(npcState[a.id].gx, npcState[a.id].gy);
+      const roomB = roomOf(npcState[b.id].gx, npcState[b.id].gy);
+      if (roomA && roomA === roomB) {
+        // 같은 방에 있으면 서로 본 것으로 기록
+        const hour = HOURS[currentHourIndex];
+        record(a.id, hour, roomA, 'seen', nameOf(round, b.id));
+        record(b.id, hour, roomB, 'seen', nameOf(round, a.id));
+      }
+    }
+  }
+}
+
 // ── NPC 자율 이동 ────────────────────────────────────────────
+// idle: 방 안에서 방황 | moving: A*로 방 간 이동
 const npcState = {}; CAST.filter(c => !c.isPlayer).forEach(c => {
   npcState[c.id] = { gx: SPOT[c.id].x, gy: SPOT[c.id].y, px: SPOT[c.id].x * TS, py: SPOT[c.id].y * TS,
-    tx: null, ty: null, path: [], step: 0, moving: false, timer: Math.random() * 120 + 30 };
+    tx: null, ty: null, path: [], step: 0, moving: false, timer: Math.random() * 120 + 30,
+    targetRoom: null, mode: 'idle' }; // mode: 'idle' | 'moving'
 });
 const NPC_SPEED = 0.12;
 
+// 방 이름에서 랜덤 도달 가능한 격자 좌표를 찾는다
+function roomToGrid(roomName) {
+  const base = ROOM_POS[roomName]; if (!base) return null;
+  // ZONES 좌표 근처에서 walkable 타일을 찾는다
+  const dirs = [[0,0],[0,-1],[0,1],[-1,0],[1,0],[-1,-1],[1,-1],[-1,1],[1,1],
+    [0,-2],[0,2],[-2,0],[2,0]];
+  for (const [dx, dy] of dirs) {
+    const x = base.x + dx, y = base.y + dy;
+    if (isWalkable(x, y)) return { x, y };
+  }
+  return base; // fallback
+}
+
+// NPC가 방 안에서 방황
 function npcWander(id) {
   const s = npcState[id]; if (s.moving) return;
   s.timer--;
@@ -427,10 +515,56 @@ function npcWander(id) {
   s.tx = pick2.x; s.ty = pick2.y; s.path = [{ x: pick2.x, y: pick2.y }]; s.step = 0; s.moving = true;
 }
 
+// NPC를 특정 방으로 보낸다 (A* 경로 탐색)
+function sendNPCtoRoom(id, roomName) {
+  const s = npcState[id];
+  const target = roomToGrid(roomName); if (!target) return;
+  // 현재 위치가 목표 방이면 무시
+  const curRoom = roomOf(s.gx, s.gy);
+  if (curRoom === roomName) return;
+  const path = findPath(s.gx, s.gy, target.x, target.y);
+  if (!path || !path.length) return;
+  s.path = path; s.step = 0; s.moving = true; s.mode = 'moving';
+}
+
+// 시각이 바뀌면 NPC를 목표 방으로 보낸다
+function advanceHour() {
+  if (!round) return;
+  currentHourIndex = (currentHourIndex + 1) % HOURS.length;
+  CAST.filter(c => !c.isPlayer).forEach(c => {
+    const targetRoom = round.paths[c.id][currentHourIndex];
+    if (targetRoom) sendNPCtoRoom(c.id, targetRoom);
+  });
+  npcShareInfo();
+  renderTimeDisplay();
+}
+
 function updateNPCs(dt) {
+  // 시각 자동 진행
+  hourTimer += dt;
+  if (hourTimer >= HOUR_INTERVAL) { hourTimer = 0; advanceHour(); }
+
   for (const c of CAST) {
     if (c.isPlayer) continue;
     const s = npcState[c.id];
+    // 방 간 이동 중이면 경로를 따른다
+    if (s.moving && s.mode === 'moving') {
+      s.px += ((s.path[s.step].x * TS) - s.px) * NPC_SPEED;
+      s.py += ((s.path[s.step].y * TS) - s.py) * NPC_SPEED;
+      if (Math.abs(s.px - s.path[s.step].x * TS) < 1 && Math.abs(s.py - s.path[s.step].y * TS) < 1) {
+        s.gx = s.path[s.step].x; s.gy = s.path[s.step].y;
+        s.px = s.gx * TS; s.py = s.gy * TS;
+        s.step++;
+        if (s.step >= s.path.length) {
+          s.moving = false; s.tx = null; s.ty = null; s.path = []; s.step = 0;
+          s.mode = 'idle'; s.timer = Math.random() * 30 + 10;
+          const room = roomOf(s.gx, s.gy);
+          if (room) SPOT[c.id].room = room;
+        }
+      }
+      continue;
+    }
+    // idle이면 방 안에서 방황
     npcWander(c.id);
     if (!s.moving) continue;
     s.px += ((s.path[s.step].x * TS) - s.px) * NPC_SPEED;
@@ -448,55 +582,22 @@ function updateNPCs(dt) {
   }
 }
 
-const inBox = (x, y) => ([x1, y1, x2, y2]) => x >= x1 && x <= x2 && y >= y1 && y <= y2;
-
-// 집은 판마다 바뀌지 않는다 — 한 번만 그려 두고 매 판 그대로 얹는다.
+// 집은 판마다 바뀌지 않는다 — SPUM 맵에서 한 번만 그려 둔다.
 function buildMapLayer() {
   const cv = document.createElement('canvas');
   cv.width = MW * TP; cv.height = MH * TP;
   const g = cv.getContext('2d'); g.imageSmoothingEnabled = false;
-  const stamp = (key, x, y) => { const im = smoImg[key]; if (im) g.drawImage(im, x * TP, y * TP); };
-
-  // 바닥 · 깔개
-  for (let y = 0; y < MH; y++) for (let x = 0; x < MW; x++) {
-    const pt = PATCH.find(inBox(x, y));
-    stamp(pt ? pt[4] : floorOf(x, y), x, y);
-    const rug = RUGS.find(inBox(x, y));
-    if (rug) stamp(rug[4], x, y);
+  // SPUM bake() 는 32px 타일로 그린다 — 16px 로 축소해서 붙인다
+  if (spumMap) {
+    const baked = spumMap.bake();
+    g.drawImage(baked, 0, 0, baked.width, baked.height, 0, 0, cv.width, cv.height);
   }
-  g.strokeStyle = 'rgba(122,106,78,.65)'; g.lineWidth = 2;
-  RUGS.forEach(([x1, y1, x2, y2]) =>
-    g.strokeRect(x1 * TP + 1, y1 * TP + 1, (x2 - x1 + 1) * TP - 2, (y2 - y1 + 1) * TP - 2));
-
-  // 벽 · 울타리 · 문
-  for (let y = 0; y < MH; y++) for (let x = 0; x < MW; x++) {
-    if (isWall(x, y)) stamp(isFence(x, y) ? 'fence' : 'house_wall', x, y);
-    else if (isDoor(x, y)) stamp('wooden_door', x, y);
-  }
-  // 벽 밑에 지는 그림자 — 빛은 늘 위에서 온다
-  g.fillStyle = 'rgba(58,42,28,.16)';
-  for (let y = 0; y < MH; y++) for (let x = 0; x < MW; x++)
-    if (isWall(x, y - 1) && !isWall(x, y) && !isDoor(x, y)) g.fillRect(x * TP, y * TP, TP, 3);
-
-  // 놓인 것 — 아래쪽에 있는 것을 나중에 그린다 (Y 정렬, 3/4 깊이)
-  const items = [...PROPS, ...ONWALL].map(p => {
-    const [cw, ch] = sizeOf(p.key);
-    return { ...p, cw, ch, sort: p.y + ch - 1 + (p.on ? 0.5 : 0) };
-  }).sort((a, b) => a.sort - b.sort);
-  items.forEach(p => {
-    if (!p.on && !PASSABLE.has(p.key)) {
-      g.fillStyle = 'rgba(58,42,28,.20)';
-      g.fillRect(p.x * TP + 1, (p.y + p.ch) * TP - 2, p.cw * TP - 2, 4);
-    }
-    stamp(p.key, p.x, p.y);
-  });
   return cv;
 }
 
 function drawScene() {
   const cv = $('#scene'); if (!cv || !mapLayer) return;
   const cx = cv.getContext('2d'); cx.imageSmoothingEnabled = false;
-  blocked ||= buildBlocked();
   cx.drawImage(mapLayer, 0, 0, cv.width, cv.height);
 
   // 자리 이름 — 어디가 어디인지 한눈에
@@ -530,6 +631,18 @@ function drawScene() {
     const bx = px + TS / 2 - S / 2, by = py + TS - S + 8;
     cx.drawImage(sh.img, (f % cols) * sh.fw, Math.floor(f / cols) * sh.fh, sh.fw, sh.fh, bx, by, S, S);
     drawSpecies(cx, c.id, bx, by, S, S);
+    // 근접 하이라이트 — 대화 가능한 NPC
+    if (nearestNPC === c.id && cur !== c.id) {
+      const pulse = 0.5 + 0.5 * Math.sin(proximityPulse);
+      cx.strokeStyle = `rgba(123,178,106,${0.4 + pulse * 0.4})`;
+      cx.lineWidth = 2.5; cx.setLineDash([4, 4]);
+      cx.strokeRect(px - 12, py - 28, TS + 24, TS + 36);
+      cx.setLineDash([]);
+      cx.font = '700 10px "Pretendard",system-ui'; cx.textAlign = 'center';
+      cx.fillStyle = `rgba(123,178,106,${0.6 + pulse * 0.3})`;
+      cx.fillText('대화 [E]', px + TS / 2, py - 30);
+      cx.textAlign = 'left';
+    }
     if (cur === c.id) { cx.strokeStyle = '#FFB86B'; cx.lineWidth = 2; cx.strokeRect(px - 10, py - 26, TS + 20, TS + 32); }
     cx.font = '700 11px "Pretendard",system-ui';
     const w = cx.measureText(c.name).width + 12;
@@ -564,10 +677,11 @@ function sceneClick(ev) {
 function renderRoster() {
   const r = $('#roster'); r.innerHTML = '';
   CAST.filter(c => !c.isPlayer).forEach(c => {
-    const d = el('div', 'who' + (cur === c.id ? ' on' : ''));
+    const isNear = nearestNPC === c.id;
+    const d = el('div', 'who' + (cur === c.id ? ' on' : '') + (isNear ? ' near' : ''));
     const sp = el('canvas', 'sp'); sp.width = 72; sp.height = 72; sp.dataset.thumb = c.id;
     sp.style.width = '72px'; sp.style.height = '72px'; sp.style.flex = '0 0 72px';
-    const t = el('div'); t.append(el('b', null, c.name), el('span', null, c.species));
+    const t = el('div'); t.append(el('b', null, c.name), el('span', null, c.species + (isNear ? ' · 근처' : '')));
     d.append(sp, t);
     d.onclick = () => { cur = c.id; renderRoster(); renderLog(); };
     r.append(d);

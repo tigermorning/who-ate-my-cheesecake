@@ -81,8 +81,11 @@ tiles.forEach((t, i) => {
   }
 });
 
+// 시트는 두 곳에 둔다 — 게임이 읽는 곳(spum/)과 문서용(docs/)
 mkdirSync(join(__dirname, '..', 'docs'), { recursive: true });
-writeFileSync(join(__dirname, '..', 'docs', 'house-theme.png'), sheet.png());
+const png = sheet.png();
+writeFileSync(join(__dirname, 'house-theme.png'), png);
+writeFileSync(join(__dirname, '..', 'docs', 'house-theme.png'), png);
 writeFileSync(join(__dirname, 'house-theme.json'), JSON.stringify({
   name: 'Who Ate My Cheesecake? · 집',
   tileSize: TS, columns: COLS, rows, count: tiles.length,
@@ -95,4 +98,4 @@ writeFileSync(join(__dirname, 'house-theme.json'), JSON.stringify({
 
 const b = tileDefs.filter(t => t.blocksMovement).length;
 console.log(`타일 ${tiles.length}개 (${COLS}×${rows}) · 막힘 ${b} · 지나감 ${tiles.length - b}`);
-console.log(`docs/house-theme.png  ${sheet.w}×${sheet.h}`);
+console.log(`spum/house-theme.png · docs/house-theme.png  ${sheet.w}×${sheet.h}`);

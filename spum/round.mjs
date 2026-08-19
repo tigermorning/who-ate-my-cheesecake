@@ -5,12 +5,13 @@
 export const ROOMS = ['부엌', '식당', '거실', '서재', '데크', '운동장', '텃밭', '헛간'];
 export const HOURS = ['21시', '22시', '23시', '00시', '01시', '02시'];
 export const CAST = [
-  { id: 'sgn_kyle',   name: '카일', species: '호랑이' },
-  { id: 'sgn_mira',   name: '미라', species: '토끼' },
-  { id: 'sgn_dorn',   name: '도른', species: '원숭이' },
-  { id: 'sgn_howell', name: '하웰', species: '돼지' },
-  { id: 'sgn_ben',    name: '벤',   species: '오리' },
-  { id: 'player',     name: '나',   species: '고양이', isPlayer: true },
+  { id: 'sgn_deer',     name: '사슴',   species: '사슴' },
+  { id: 'sgn_horse',    name: '적토마', species: '말' },
+  { id: 'sgn_penguin',  name: '펭귄',   species: '펭귄' },
+  { id: 'sgn_rabbit',   name: '토끼',   species: '토끼' },
+  { id: 'sgn_chestnut', name: '밤톨이', species: '곰' },
+  { id: 'sgn_bull',     name: '황소',   species: '황소' },
+  { id: 'player',       name: '나',     species: '고양이', isPlayer: true },
 ];
 
 export const SHIELDS = [

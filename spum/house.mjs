@@ -257,12 +257,13 @@ export const ONWALL = [
 
 // ── 서 있는 자리 ────────────────────────────────────────────
 export const SPOT = {
-  sgn_kyle:   { room: '거실', x: 25, y: 15 },
-  sgn_mira:   { room: '식당', x: 12, y: 20 },
-  sgn_dorn:   { room: '텃밭', x: 34, y: 18 },
-  sgn_howell: { room: '부엌', x: 15, y: 10 },
-  sgn_ben:    { room: '서재', x: 24, y: 24 },
-  player:     { room: '복도', x: 20, y: 24 },
+  sgn_deer:     { room: '거실', x: 25, y: 15 },
+  sgn_horse:    { room: '식당', x: 12, y: 20 },
+  sgn_penguin:  { room: '텃밭', x: 34, y: 18 },
+  sgn_rabbit:   { room: '부엌', x: 15, y: 10 },
+  sgn_chestnut: { room: '서재', x: 24, y: 24 },
+  sgn_bull:     { room: '거실', x: 20, y: 15 },
+  player:       { room: '복도', x: 20, y: 24 },
 };
 
 // 이야기가 걸리는 자리 — 냉장고·난로·책상 …. 검사에서 걸어 닿는지 확인한다.
