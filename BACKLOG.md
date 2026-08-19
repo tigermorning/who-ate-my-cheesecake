@@ -26,11 +26,14 @@
 - [x] **플레이어를 캐스트 6종 중 하나로** — 「나(고양이)」 삭제. 시작할 때 고르고, 고른 캐릭터는
       범인에서 빠진다(`makeRound(seed, playerId)`). 플레이어도 SPUM 런타임이 그린다
 
+- [x] **SPUM 월드 AI 의 SAM 호출 404 해결** (08-19) — 런타임이 `model` 을 빈값으로 보내
+      SAM 이 `Unknown model: ''` 404 를 줬다. `serve.mjs` 에 `normalizeSamBody()` 추가:
+      빈/없는 `model` 을 `SAM_MODEL`(기본 `claude-haiku-4-5`)로 채우고, `prompt` 모양이 오면
+      `messages` 로 바꾸고, `max_tokens` 기본 512 를 넣는다.
+      실측: 빈 모델 → 200, model 필드 없음 + prompt → 200 (둘 다 응답 정상)
+
 ## 지금 하는 것
-- [ ] **SPUM 월드 AI 의 SAM 호출 404 고치기** — 런타임이 `/api/sam/v1/generate` 를 부르는데
-      모델 이름이 빈값이라 SAM 이 `Unknown model: ''` 로 404 를 준다. 우리 서버가 그 404 를
-      그대로 흘린다. 실측: `POST /openai/v1/chat/completions` + `claude-haiku-4-5` → 200 정상.
-      → sync 의 `worldAI` 로 모델을 넘기거나, serve.mjs 에서 빈 모델을 기본값으로 채워라
+- (없음 — 아래 「다음」의 Step 5 부터)
 
 ## 다음 (순서대로)
 - [ ] Step 5: NPC 기억 + 소통 — 사건 기억, 자연스러운 정보 공유

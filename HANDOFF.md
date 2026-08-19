@@ -72,9 +72,18 @@
 
 **`inject-characters.mjs` 는 쓰지 마라.** `repair-characters.mjs` 가 대체한다.
 
+## 08-19 SAM 404 수정 (Claude Code)
+SPUM 월드 런타임이 `/api/sam/v1/generate` 를 부를 때 `model` 을 비운 채 보낸다 →
+SAM 이 `Unknown model: ''` 로 404. `serve.mjs` 는 body 를 그대로 흘리고 있었다.
+- 조치: `normalizeSamBody()` 추가 (`serve.mjs`, SAM 대리 호출 블록 바로 위)
+  - 빈/없는 `model` → `env.SAM_MODEL || 'claude-haiku-4-5'`
+  - `prompt`/`input`/`text` + `system` 이 오면 `messages` 배열로 변환
+  - `max_tokens` 없으면 512
+- 검증: `{"model":""}` → 200, `{"prompt":"..."}` (model 없음) → 200. 둘 다 정답 응답.
+- 모델을 바꾸려면 `.env` 에 `SAM_MODEL=` 을 적는다.
+
 ## 다음 할 일
-1. **play.html 에서 SPUM 런타임 캐릭터 렌더링 확인** — 복구된 11종을 런타임이 그리는지
-2. Step 5 (NPC 기억+소통) → Step 6 (LANDMARKS 연결) → Step 7 (데모 검증)
+1. Step 5 (NPC 기억+소통) → Step 6 (LANDMARKS 연결) → Step 7 (데모 검증)
 
 ## 막힌 것 / 주의
 - SPKG 암호화 → 스프라이트 직접 접근 불가

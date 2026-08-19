@@ -104,10 +104,32 @@ const server = http.createServer(async (req, res) => {
     return res.end(BRIDGE_JS.replace('PORT_HERE', String(PORT)));
   }
 
-  // ── SAM 대리 호출. 키는 서버에서만 붙인다 ──────────────────
+  // SPUM 런타임은 model 을 비운 채로 부른다 — 그대로 넘기면 SAM 이
+// `Unknown model: ''` 로 404 를 준다. 여기서 빈 자리를 채워 준다.
+const SAM_MODEL = env.SAM_MODEL || 'claude-haiku-4-5';
+function normalizeSamBody(raw) {
+  let o;
+  try { o = JSON.parse(raw); } catch { return raw; }
+  if (!o || typeof o !== 'object') return raw;
+  if (typeof o.model !== 'string' || !o.model.trim()) o.model = SAM_MODEL;
+  // /generate 모양(prompt)으로 오면 chat 모양(messages)으로 바꾼다
+  if (!Array.isArray(o.messages) || !o.messages.length) {
+    const prompt = o.prompt || o.input || o.text;
+    if (typeof prompt === 'string' && prompt) {
+      o.messages = [];
+      if (typeof o.system === 'string' && o.system) o.messages.push({ role: 'system', content: o.system });
+      o.messages.push({ role: 'user', content: prompt });
+      delete o.prompt; delete o.input; delete o.text; delete o.system;
+    }
+  }
+  if (!o.max_tokens && !o.max_completion_tokens) o.max_tokens = 512;
+  return JSON.stringify(o);
+}
+
+// ── SAM 대리 호출. 키는 서버에서만 붙인다 ──────────────────
   // SPUM 런타임은 /api/sam/v1/generate 를 사용한다
   if ((url.pathname === '/api/sam/generate' || url.pathname === '/api/sam/v1/generate') && req.method === 'POST') {
-    const body = await readBody(req);
+    const body = normalizeSamBody(await readBody(req));
     if (!SAM_KEY) {
       // 키가 없으면 로그인된 SPUM 탭(다리)에게 부탁한다
       const id = 'j' + (jobSeq++);
