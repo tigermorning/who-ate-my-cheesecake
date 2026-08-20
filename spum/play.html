@@ -24,11 +24,12 @@ header.top{display:flex;align-items:center;gap:14px;margin-bottom:14px}
 /* 맵과 곁창을 한 줄에 둔다 — 걸으면서 로스터·증언판을 동시에 봐야 한다.
    맵을 위, 창을 아래에 두면 둘 중 하나는 늘 화면 밖이었다. */
 .play{display:grid;grid-template-columns:290px minmax(0,1fr) 320px;gap:14px;align-items:start}
-/* 곁창은 맵을 따라 스크롤되지 않고 제자리에 붙어 있는다. 길어지면 창 안에서만 스크롤한다. */
-.side{position:sticky;top:14px;max-height:calc(100vh - 28px);overflow:auto}
+/* 곁창은 짧으면 제자리에 붙어 있는다. 높이를 잘라 창 안에 스크롤바를 만들지는 않는다 —
+   안내가 그 안에 숨어 버려서 읽히지 않는다. 내용이 길면 그냥 페이지가 스크롤된다. */
+.side{position:sticky;top:14px}
 @media (max-width:1240px){
   .play{grid-template-columns:1fr}
-  .side{position:static;max-height:none}
+  .side{position:static}
   .play .stagecard{order:-1}      /* 좁은 화면에서는 맵이 먼저 */
 }
 .card{background:var(--card);border:1.5px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:14px}
@@ -70,6 +71,14 @@ th{background:var(--cream);font-size:10.5px;color:var(--ink-soft)}
 td.conflict{background:#FFE2DC;color:#B4442F;font-weight:800}
 td.own{background:#EFF7EA}
 .note{font-size:12px;color:var(--ink-soft)}
+/* 위쪽 알약·버튼이 무슨 뜻인지 — 처음 하는 사람은 이걸 몰라서 시계도 예산도 그냥 흘려보낸다 */
+.hud-help{margin-top:10px;border-top:1.5px dashed var(--line);padding-top:9px}
+.hud-help h4{font-size:11.5px;font-weight:800;color:var(--ink-soft);letter-spacing:.06em;margin:0 0 7px}
+.hud-help dl{display:grid;grid-template-columns:auto 1fr;gap:5px 9px;margin:0;font-size:12px;line-height:1.45}
+.hud-help dt{white-space:nowrap;font-weight:800;color:var(--ink);
+  background:var(--cream);border:1px solid var(--line);border-radius:999px;padding:1px 8px;height:fit-content}
+.hud-help dt.btn{background:var(--cream-2);border-color:var(--accent-2)}
+.hud-help dd{margin:0;color:var(--ink-soft)}
 .stage .overchat{position:absolute;left:12px;right:12px;bottom:10px;width:auto;z-index:3;
   background:rgba(255,253,248,.78);backdrop-filter:blur(4px);border:1.5px solid rgba(231,211,184,.9);
   border-radius:14px;box-shadow:0 8px 24px rgba(90,60,30,.20);padding:8px 10px;line-height:1.45;
@@ -120,6 +129,32 @@ dialog::backdrop{background:rgba(60,40,25,.45)}
         <b>W A S D</b> · <b>↑ ← ↓ →</b> 걷기 &nbsp;·&nbsp; <b>E</b> 옆 사람에게 말 걸기 &nbsp;·&nbsp;
         <b>Space</b> 대화 시작/이어가기 &nbsp;·&nbsp; <b>Esc</b> 대화 닫기 &nbsp;·&nbsp; <b>Tab</b> 증언판 여닫기
       </p>
+
+      <div class="hud-help">
+        <h4>맨 위 표시가 뜻하는 것</h4>
+        <dl>
+          <dt>시간</dt>
+          <dd>21시~02시 여섯 칸. 45초마다 넘어가고, 넘어가면 식구들이 <b>그 시각의 방으로</b> 옮긴다.</dd>
+
+          <dt>대화</dt>
+          <dd>말 걸 수 있는 횟수. <b>18번뿐</b>이다. 엿듣기는 안 센다.</dd>
+
+          <dt>소문</dt>
+          <dd>식구들끼리 주고받은 횟수. <b>5칸 안에 붙어 있으면 엿들린다.</b></dd>
+
+          <dt>SAM</dt>
+          <dd>대사를 짓는 AI. 「없음」이면 대사가 단순해진다.</dd>
+
+          <dt class="btn">다음 시각 ▶</dt>
+          <dd>시계를 한 칸 넘긴다. <b>다들 흩어졌을 때</b> 누른다.</dd>
+
+          <dt class="btn">새 판</dt>
+          <dd>처음부터 다시. <b>범인도 새로 뽑힌다.</b></dd>
+
+          <dt class="btn">지목하기</dt>
+          <dd>사람·시각·목격자를 대고 끝낸다. <b>사람과 시각을 맞혀야 이긴다.</b></dd>
+        </dl>
+      </div>
     </section>
 
     <section class="card stagecard" style="padding:8px">
