@@ -222,10 +222,10 @@ export function buildMessages({ round, id, world, history = [], userText, mood =
   const act = intent?.act || 'UNKNOWN';
   const actHint = {
     ASK_EATEN: '질문은 케이크를 먹었는지 묻는 것이다. 방패(근거)를 대고 아니라고 답하거나, 아는 바를 짧게 말한다.',
-    ASK_SIGHTING: '질문은 목격을 묻는 것이다. 같은 방에서 본 사람이 있으면 말하고, 없으면 없다고 답한다.',
-    ASK_ABOUT: '질문은 특정 인물의 행적을 묻는 것이다. 그 사람이 같은 방에 있었으면 말하고, 모르면 모른다고 답한다.',
-    ASK_WHEREABOUTS: '질문은 자기나 남의 행적을 묻는 것이다. 자기 자리를 한두 시간치만 말하고, 나머지는 모른다고 한다.',
-    FOLLOW_UP: '이전 대화의 화제를 이어가는 질문이다. 앞서 말한 시각·장소를 기준으로 답한다.',
+    ASK_SIGHTING: '질문은 목격을 묻는 것이다. 같은 방에서 본 사람이 있으면 시각과 방을 함께 말하고, 없으면 없다고 답한다.',
+    ASK_ABOUT: '질문은 특정 인물의 행적을 묻는 것이다. 그 사람을 본 시각과 방이 있으면 말하고, 모르면 모른다고 답한다.',
+    ASK_WHEREABOUTS: '질문은 자기나 남의 행적을 묻는 것이다. "21시엔 텃밭, 22시엔 거실에 있었어"처럼 반드시 시각과 방 이름을 함께 말한다. 한두 시간치만 말하고 나머지는 묻거든 말한다.',
+    FOLLOW_UP: '이전 대화의 화제를 이어가는 질문이다. 앞서 말한 시각·장소를 기준으로 그 다음 시각의 자리나 목격을 답한다.',
     GREET: '인사다. 네 성격대로 받고, 하고 싶은 말이 있으면 덧붙여도 된다.',
     SOCIAL: '잡담이다. 사건 정보를 억지로 끼워 넣지 않는다. 사람처럼 대화한다.',
     UNKNOWN: '사건과 무관한 말일 수 있다. 분류하려 들지 말고 네 성격대로 자연스럽게 받아라.',
@@ -258,6 +258,7 @@ export function buildMessages({ round, id, world, history = [], userText, mood =
     '[대답하는 법]',
     '· ' + actHint,
     '· 응답 길이: ' + responseGuide,
+    '· 반드시 캐릭터의 직접 대사만 출력한다. 따옴표, 지문, 해설, 선택지 없이 말할 내용만 바로 출력한다.',
     '· 시각과 장소를 한 번에 세 칸 이상 늘어놓지 않는다.',
     '· 묻지 않은 사건 정보는 먼저 흘리지 않는다. 다만 대화 자체는 열려 있다 —',
     '  날씨든 일 이야기든 상대 이야기든, 물어오면 네 성격대로 편하게 받고 되물어도 된다.',
@@ -286,8 +287,11 @@ export function violations(round, id, text, mem = null) {
   if (k.alibiLie) ok.add(k.alibiLie.hour + '|' + k.alibiLie.room);
   heardPairs(mem).pairs.forEach(p => ok.add(p));      // 전해 들은 자리도 입에 올릴 수 있다
 
+  // 쉼표도 문장 경계로 본다. 안 그러면 "21시엔 운동장, 22시엔 데크" 처럼 승인된 두 쌍을
+  // 한 문장으로 묶어 (21시,데크)(22시,운동장) 같은 교차 조합까지 위반으로 오탐한다 —
+  // 실측(harness.mjs --live, 시드 42, 미누): 정확히 이 문장에서 재현됨.
   const hits = [];
-  for (const sent of text.split(/[.!?\n]/)) {
+  for (const sent of text.split(/[.!?,、\n]/)) {
     const hs = HOURS.filter(h => sent.includes(h));
     const rs = ROOMS.filter(r => sent.includes(r));
     for (const h of hs) for (const r of rs) {
@@ -348,6 +352,7 @@ export function buildGossipMessages({ round, speakerId, listenerId, persona, fac
     '[쓰는 법]',
     '· ' + gossipStyle,
     '· 한 문장. 길어도 두 문장.',
+    '· 반드시 캐릭터의 직접 대사만 출력한다. 큰따옴표, 상황 해설("~에게 다가가며:"), 선택지("혹은 ~"), 부연설명 없이 캐릭터가 내뱉을 문장만 그대로 출력한다.',
     '· 시각·장소·사람 이름을 바꾸지 않는다. 없는 사실을 보태지 않는다.',
     '· 상대 이름을 부르거나 말을 걸듯이. 보고서처럼 읽히면 실패다.',
     '· 네 말투 그대로. 같은 사실이라도 매번 다르게 말한다.',
@@ -355,5 +360,5 @@ export function buildGossipMessages({ round, speakerId, listenerId, persona, fac
     '· 농담이나 가벼운 반응을 섞어도 된다. 너무 진지하지 마라.',
   ].join('\n');
   return [{ role: 'system', content: sys },
-    { role: 'user', content: `${nameOf(round, listenerId)}에게 그 이야기를 건네라.` }];
+    { role: 'user', content: `${nameOf(round, listenerId)}에게 건넬 한마디 대사만 말해라.` }];
 }
