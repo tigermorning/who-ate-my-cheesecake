@@ -13,28 +13,94 @@ export const MODEL = { fast: 'claude-haiku-4-5', normal: 'claude-sonnet-4.6', be
 export const VOICE = {
   sgn_haru: {
     tone: '밝고 다정한 존댓말. 느낌표가 많다. 긍정적 표현을 즐긴다.',
-    shots: ['저요?! 저는 부엌에서 빵 구우고 있었어요!', '아 ResourceBundle 새로운 빵 레시피를 시도 중이었거든요~', '다들 맛있는 냄새가 나서 부엌으로 온 거 아니에요?'],
+    tendency: 'talkative',  // 말이 많다. 이야기를 잘 이어간다.
+    shots: [
+      '저요?! 저는 부엌에서 빵 구우고 있었어요!',
+      '새로운 빵 레시피를 시도 중이었거든요~',
+      '다들 맛있는 냄새가 나서 부엌으로 온 거 아니에요?',
+      '어젯밤에 특별히 좋은 냄새가 났거든요~ 혹시 다들 느끼셨어요?',
+      '빵 굽는 건 정말 좋아요~ 과정이 즐거워서요!',
+      '아, 그 시간대에는 부엌에 혼자 있었어요~ 레시피 정리하고 있었지~',
+      '다들 너무 의심하지 마요~ 저는 빵만 구웠어요!',
+      '치즈케이크는… 아 저도 먹고 싶긴 한데요~',
+    ],
   },
   sgn_mina: {
     tone: '짧고 정중한 말투. 감정을 잘 드러내지 않는다. 한 번에 한 가지만 말한다.',
-    shots: ['서재에 있었다. 시를 쓰고.', '그 시각, 아무도 없었다.', '관찰한 것만 말하겠다.'],
+    tendency: 'reserved',  // 과묵. 짧게 대답하고 말을 아낀다.
+    shots: [
+      '서재에 있었다. 시를 쓰고.',
+      '그 시각, 아무도 없었다.',
+      '관찰한 것만 말하겠다.',
+      '아무도 안 보였다. 조용했다.',
+      '그 시간 기억한다. 서재에 혼자 있었다.',
+      '남의 일에는 관심 없다. 내 할 일만 했다.',
+      '시는 혼자 쓰는 거다.',
+      '목격한 건 없다. 보지 않았으면 모른다고 했다.',
+    ],
   },
   sgn_coco: {
     tone: '반말에 가까운 편한 말투. 말이 빠르다. 호기심이 많다.',
-    shots: ['나 텃밭에 있었거든! 토마토 봤어!', '아 근데 부엌 쪽에서 냄새 났는데?', '誰가 밤에 돌아다니는 거 봤어!'],
+    tendency: 'talkative',  // 말이 많다. 호기심이 많아 질문도 많이 한다.
+    shots: [
+      '나 텃밭에 있었거든! 토마토 봤어!',
+      '아 근데 부엌 쪽에서 냄새 났는데?',
+      '누가 밤에 돌아다니는 거 봤어!',
+      '야 너 그 시간에 어디 있었어? 진짜?',
+      '텃밭이 제일 좋아~ 밤에도 가끔 나가거든~',
+      '아 그건 아닌데~ 나는 그냥 텃밭이었어~',
+      '음 의심 가득한 눈으로 보지 마~ 나는 텃밭 하나뿐이야!',
+      '동트기 전에 일어나서 텃밭 봤거든~ 새도 봤어!',
+    ],
   },
   sgn_lulu: {
     tone: '말이 느리고 흐릿하다. 확신이 없는 말투. 하품이 섞인다.',
-    shots: ['아 뭐… 거실 난로 앞이었나…', '그때 좀 졸았는지도…', '꿈을 꾸고 있었는지, 아니었는지…'],
+    tendency: 'reserved',  // 과묵. 생각이 느리고 말이 적다.
+    shots: [
+      '아 뭐… 거실 난로 앞이었나…',
+      '그때 좀 졸았는지도…',
+      '꿈을 꾸고 있었는지, 아니었는지…',
+      '어… 거실? 난로 앞에서 잠깐… 뭐 있었던 것 같은…',
+      '하암… 밤에는 잠깐 잠들었어… 꿈은 기억 안 나…',
+      '아 뭐иль까… 그 시간에는 그냥… 가만히 있었어…',
+      '글쎄… 기억이 좀 흐릿해… 미안…',
+    ],
   },
   sgn_peach: {
     tone: '활기찬 말투. 리듬감 있게 말한다. 느낌표가 많다.',
-    shots: ['데크에서 기타 치고 있었어요~♪', '밤바람이 너무 좋아서 오래 있었죠!', '누군가의 발소리를 들은 것 같기도?'],
+    tendency: 'talkative',  // 말이 많다. 음악처럼 리듬감 있게 말한다.
+    shots: [
+      '데크에서 기타 치고 있었어요~♪',
+      '밤바람이 너무 좋아서 오래 있었죠!',
+      '누군가의 발소리를 들은 것 같기도?',
+      '음악이 밤바람이랑 너무 잘 어울려서~ 오래 있었어요♪',
+      '데크에서 기타 치는데~ 누가 지나가는 거 같더라고요~',
+      '밤하늘이 너무 예뻐서요~ 혼자 음악 들으며 있었어요!',
+      '아~ 그 시간에는 데크에서 기타 연습 중이었어요~',
+      '밤에 데크에 갔는데~ 진짜 아무도 없었어요!',
+    ],
   },
   sgn_ruby: {
     tone: '도도한 존댓말. 정확하게 말한다. 틀리면 바로 짚어준다.',
-    shots: ['저는 식당에서 재료를 정리하고 있었습니다.', '정확히 22시부터 식당이었어요.', '레시피 확인은 제일 중요한 일이니까요.'],
+    tendency: 'moderate',  // 적당히 말한다. 필요한 것만 정확하게.
+    shots: [
+      '저는 식당에서 재료를 정리하고 있었습니다.',
+      '정확히 22시부터 식당이었어요.',
+      '레시피 확인은 제일 중요한 일이니까요.',
+      '정확히 기억합니다. 식당에서 재료 정리 중이었어요.',
+      '레시피를 검토하고 있었어요. 시간은 정확히 22시부터요.',
+      '재료 관리는 매일 하는 일이에요. 어젯밤에도 마찬가지였습니다.',
+      '식당에서 빠져나온 적 없어요. 확인해 보셔도 됩니다.',
+      '정확하지 않은 정보는 받아들일 수 없습니다.',
+    ],
   },
+};
+
+// 캐릭터별 대화 성향에 따른 응답 길이 가이드
+const RESPONSE_LENGTH_GUIDE = {
+  talkative: '두세 문장. 가끔 네 문장까지.',
+  moderate: '한두 문장. 필요한 때에만 세 문장.',
+  reserved: '한 문장. 꼭 필요한 말만.',
 };
 
 // ── 질문 의도 분류 ──────────────────────────────────────────
@@ -45,14 +111,36 @@ export function classifyIntent(text) {
   const room = ROOMS.find(r => t.includes(r)) || null;
   const personNames = ['하루', '미나', '코코', '루루', '피치', '루비'];
   const person = personNames.find(n => t.includes(n)) || null;
-  const you = /너|자기|네가/.test(t);
-  if (/먹었|먹었어| 먹었|케이크|치즈|도둑/.test(t)) return { act: 'ASK_EATEN', hour, room, person };
-  if (/봤|보았|보았|봤어|보였/.test(t)) return { act: 'ASK_SIGHTING', hour, room, person };
-  if (/어디|어디에|몇 시|언제|자리|행적|갔/.test(t) && person) return { act: 'ASK_ABOUT', hour, room, person };
-  if (/어디|어디에|몇 시|언제|자리|행적|갔/.test(t)) return { act: 'ASK_WHEREABOUTS', hour, room, person };
-  if (/이후|그 뒤|그 다음/.test(t)) return { act: 'FOLLOW_UP', hour, room, person };
-  if (/안녕|반가워|좋은 아침/.test(t)) return { act: 'GREET', hour, room, person };
-  if (/기분|어떠|어때|심정/.test(t)) return { act: 'SOCIAL', hour, room, person };
+  const you = /너|자기|네가|니가|당신/.test(t);
+
+  // 케이크 먹었는지 묻는 질문 - 다양한 표현 지원
+  if (/먹었|먹었어|먹은|먹은 거|먹은 일|케이크|치즈|도둑|훔쳤|훔친|偷吃|혹시.*먹|혹시.*훔|진짜.*먹|정말.*먹|많이.*먹|㋾.*먹/.test(t))
+    return { act: 'ASK_EATEN', hour, room, person };
+
+  // 목격 질문 - 다양한 표현
+  if (/봤|보았|보았|봤어|보였|目睹|본|目擊|로 봤|에.*봤|에서.*봤/.test(t))
+    return { act: 'ASK_SIGHTING', hour, room, person };
+
+  // 특정 인물의 행적 질문
+  if ((/어디|어디에|몇 시|언제|자리|행적|갔|다녀|들어|나와|나간|이동|방문|들어왔|나갔|문제|icom/.test(t)) && person)
+    return { act: 'ASK_ABOUT', hour, room, person };
+
+  // 일반적인 행적 질문
+  if (/어디|어디에|몇 시|언제|자리|행적|갔|다녀|들어|나와|나간|이동|방문/.test(t))
+    return { act: 'ASK_WHEREABOUTS', hour, room, person };
+
+  // 후속 질문
+  if (/이후|그 뒤|그 다음|그 후|거기서|그때|다음|이어/.test(t))
+    return { act: 'FOLLOW_UP', hour, room, person };
+
+  // 인사
+  if (/안녕|반가워|좋은 아침|잘 잤|어이|이봐|야|저기/.test(t))
+    return { act: 'GREET', hour, room, person };
+
+  // 감정/기분 질문
+  if (/기분|어떠|어때|심정|화났|기뻐|슬퍼|무서|걱정|근심|스트레스|힘들|피곤|졸려|배고|목말|배부/.test(t))
+    return { act: 'SOCIAL', hour, room, person };
+
   return { act: 'UNKNOWN', hour, room, person };
 }
 
@@ -125,7 +213,7 @@ export function playerCardLines(card) {
 export function buildMessages({ round, id, world, history = [], userText, mood = null, intent = null, mem = null, persona = null, playerCard = null }) {
   // 플레이어 캐릭터는 AI 가 대신 말하지 않는다 — 인격도 SAM 에 보내지 않는다.
   if (round.playerId && id === round.playerId) throw new Error('플레이어 캐릭터는 SAM 이 대신 말하지 않는다');
-  const v = VOICE[id] || { tone: '', shots: [] };
+  const v = VOICE[id] || { tone: '', shots: [], tendency: 'moderate' };
   const act = intent?.act || 'UNKNOWN';
   const actHint = {
     ASK_EATEN: '질문은 케이크를 먹었는지 묻는 것이다. 방패(근거)를 대고 아니라고 답하거나, 아는 바를 짧게 말한다.',
@@ -137,6 +225,16 @@ export function buildMessages({ round, id, world, history = [], userText, mood =
     SOCIAL: '잡담이다. 사건 정보를 억지로 끼워 넣지 않는다. 사람처럼 대화한다.',
     UNKNOWN: '사건과 무관한 말일 수 있다. 분류하려 들지 말고 네 성격대로 자연스럽게 받아라.',
   }[act] || '사건과 무관한 말일 수 있다. 분류하려 들지 말고 네 성격대로 자연스럽게 받아라.';
+
+  // 최근 대화 맥락 요약 - 문맥 연속성 지원
+  const recentHistory = history.slice(-6);
+  const contextSummary = recentHistory.length > 0
+    ? `[최근 대화 맥락]\n${recentHistory.map(h => `${h.who === 'player' ? '플레이어' : nameOf(round, id)}: ${h.text}`).join('\n')}\n이전 대화를 이어가되, 반복하지 말고 자연스럽게 받아라.`
+    : '';
+
+  // 캐릭터 성향에 따른 응답 길이 가이드
+  const responseGuide = RESPONSE_LENGTH_GUIDE[v.tendency] || RESPONSE_LENGTH_GUIDE.moderate;
+
   const sys = [
     world.join('\n'),
     '',
@@ -149,14 +247,21 @@ export function buildMessages({ round, id, world, history = [], userText, mood =
     '',
     ...playerCardLines(playerCard),
     '',
+    contextSummary,
+    '',
     '[대답하는 법]',
     '· ' + actHint,
-    '· 두세 문장을 넘기지 않는다. 시각과 장소를 한 번에 세 칸 이상 늘어놓지 않는다.',
+    '· 응답 길이: ' + responseGuide,
+    '· 시각과 장소를 한 번에 세 칸 이상 늘어놓지 않는다.',
     '· 묻지 않은 사건 정보는 먼저 흘리지 않는다. 다만 대화 자체는 열려 있다 —',
     '  날씨든 빵이든 상대 이야기든, 물어오면 네 성격대로 편하게 받고 되물어도 된다.',
     '· 정해진 문장 틀에 맞추지 마라. 매번 다르게 말한다.',
     '· 상대는 심문관이 아니라 같이 사는 식구다. 편하게 대한다.',
     '· 남에게 전해 들은 이야기는 출처를 밝히고 말한다. 네가 직접 본 것처럼 말하지 않는다.',
+    '· 상대의 말에 반응한다. 질문에만 대답하지 말고, 대화의 흐름을 이어간다.',
+    '· 필요하면 화제를 자연스럽게 바꿔도 된다. 항상 같은 주제에 매달릴 필요는 없다.',
+    '· 가끔은 짧게 대답하고 끝내도 된다. 반드시 대화를 이어갈 필요는 없다.',
+    '· 농담이나 가벼운 반응, 하품, 짧은 감탄사 등도 자연스러운 변주다.',
     mood ? '· 지금 기분: ' + mood : '',
   ].filter(Boolean).join('\n');
 
@@ -214,22 +319,33 @@ export function topicOf(intent, text = '') {
 // SAM 은 그 한 조각을 **그 캐릭터의 입으로** 옮기기만 한다.
 export function buildGossipMessages({ round, speakerId, listenerId, persona, fact, kind }) {
   if (round.playerId && speakerId === round.playerId) throw new Error('플레이어는 SAM 이 대신 말하지 않는다');
-  const v = VOICE[speakerId] || { tone: '', shots: [] };
+  const v = VOICE[speakerId] || { tone: '', shots: [], tendency: 'moderate' };
   const heard = kind === 'place';
+
+  // 캐릭터 성향에 따른 소문 스타일
+  const gossipStyle = {
+    talkative: '자연스럽게 이야기를 건네며, 상대의 반응을 기대한다. 가끔 뒷말을 붙여서 대화를 이어간다.',
+    moderate: '간결하게 사실을 전한다. 너무 길게 말하지 않는다.',
+    reserved: '딱 필요한 말만 하고 끝낸다. 더 이상 묻지 않으면 말을 아낀다.',
+  }[v.tendency] || '간결하게 사실을 전한다.';
+
   const sys = [
     `[너의 배역] ${nameOf(round, speakerId)} — ${persona?.occupation || ''} (SPUM Cast)`,
     ...personaLines(persona, v.tone),
     '',
-    `[상황] 집 안에서 ${nameOf(round, listenerId)}와(과) 마주쳤다. 아래 사실 하나를 흘리듯 건넨다.`,
+    `[상황] 집 안에서 ${nameOf(round, listenerId)}와(과) 마주쳤다. 아래 사실 하나를 자연스럽게 건넨다.`,
     `[전할 사실] ${fact}`,
     heard ? '[주의] 이건 네가 직접 본 게 아니라 전해 들은 이야기다. 반드시 출처를 밝혀 말한다.'
           : '[주의] 이건 네가 직접 겪거나 본 것이다.',
     '',
     '[쓰는 법]',
+    '· ' + gossipStyle,
     '· 한 문장. 길어도 두 문장.',
     '· 시각·장소·사람 이름을 바꾸지 않는다. 없는 사실을 보태지 않는다.',
     '· 상대 이름을 부르거나 말을 걸듯이. 보고서처럼 읽히면 실패다.',
     '· 네 말투 그대로. 같은 사실이라도 매번 다르게 말한다.',
+    '· 가끔은 사실만 전하고 끝내도 된다. 반드시 대화를 이어갈 필요는 없다.',
+    '· 농담이나 가벼운 반응을 섞어도 된다. 너무 진지하지 마라.',
   ].join('\n');
   return [{ role: 'system', content: sys },
     { role: 'user', content: `${nameOf(round, listenerId)}에게 그 이야기를 건네라.` }];
