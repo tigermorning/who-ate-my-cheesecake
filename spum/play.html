@@ -16,7 +16,7 @@ body{margin:0;background:radial-gradient(1200px 600px at 50% -10%,#FFF9F0,#F6E7D
   color:var(--ink);font:15px/1.6 "Pretendard","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
   overflow-x:hidden}   /* 마지막 안전망 — 뭔가 삐져나가도 화면이 옆으로 밀리지 않게 */
 h1,h2,h3{margin:0;font-weight:800;letter-spacing:-.02em}
-.wrap{max-width:1560px;margin:0 auto;padding:18px 16px 40px}
+.wrap{max-width:1680px;margin:0 auto;padding:18px 10px 40px}
 header.top{display:flex;align-items:center;gap:14px;margin-bottom:14px}
 .logo{font-size:22px;font-weight:900}
 .logo small{display:block;font-size:11px;font-weight:600;color:var(--ink-soft);letter-spacing:.06em}
@@ -26,7 +26,7 @@ header.top{display:flex;align-items:center;gap:14px;margin-bottom:14px}
    맵을 위, 창을 아래에 두면 둘 중 하나는 늘 화면 밖이었다. */
 /* 좌우 칸은 고정폭이 아니라 화면 폭에 따라 줄어든다 — 맵(가운데)이 기준이고,
    텍스트 칸은 좁은 화면에서도 화면 밖으로 밀려나지 않는다. */
-.play{display:grid;grid-template-columns:clamp(170px,18vw,230px) minmax(0,1fr) clamp(230px,26vw,320px);gap:14px;align-items:start}
+.play{display:grid;grid-template-columns:clamp(170px,18vw,230px) minmax(0,1fr) clamp(230px,24vw,370px);gap:14px;align-items:start}
 /* 곁창은 짧으면 제자리에 붙어 있는다. 높이를 잘라 창 안에 스크롤바를 만들지는 않는다 —
    안내가 그 안에 숨어 버려서 읽히지 않는다. 내용이 길면 그냥 페이지가 스크롤된다. */
 .side{position:sticky;top:14px}
