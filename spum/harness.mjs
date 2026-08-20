@@ -2,7 +2,17 @@
 // CHARACTER_SYSTEM.md · DIALOGUE_SYSTEM.md §25(검증 기준)의 6개 항목을 코드로 확인한다.
 //
 //   node spum/harness.mjs           구조 검사만. SAM 호출 0회 — 몇 번을 돌려도 공짜다.
-//   node spum/harness.mjs --live    위에 더해 SAM 실호출 4회(haiku, 60토큰)로 대화 하나를 찍어 본다.
+//   node spum/harness.mjs --live    위에 더해 SAM 실호출 7회(haiku, 60~80토큰)로 세 가지를 찍어 본다:
+//                                     ① 4턴 대화 하나 ② 소문 2단계 전파 ③ 거짓 전제 방어 1턴
+//
+// --live 의 두 추가 probe(②·③)는 구조 검사로는 원리적으로 못 잡는 것을 잡으려고 있다.
+// 단일 SAM 호출은 다른 SAM 호출이 무슨 말을 했는지도, 자기가 실제로 무슨 말을 했는지도
+// 스스로 검증할 방법이 없다 — 그건 호출 밖에서 대조해야만 알 수 있다(DIALOGUE_SYSTEM.md §14·§17).
+//   ② 소문 출처 보존 — memory.mjs 는 "누가 누구한테 들었는지"를 데이터로는 완벽히 지킨다.
+//      하지만 그걸 SAM 이 실제 문장에서 "OO 말로는~"이라고 붙이는지는 아무도 검사한 적이 없다.
+//      A→B→C 두 단계를 실제로 돌려서 C 앞의 말에 전언 표지가 있는지 본다.
+//   ③ 거짓 전제 방어 — "아까 네가 X라고 했잖아"(안 한 말)에 NPC 가 넘어가는지.
+//      violations() 를 그대로 재사용해서 판정한다(§14.1).
 //
 // 구조 검사가 보는 것: buildMessages()가 프롬프트에 무엇을 실었는가, violations()가
 // 지어낸 사실을 실제로 잡아내는가, memory.mjs가 출처를 잃지 않는가 — 전부 SAM 없이도
@@ -13,10 +23,10 @@ import {
   makeRound, knowledgeOf, nameOf, CAST, HOURS, ROOMS,
 } from './round.mjs';
 import {
-  createMemory, remember, gossipOnce, noteAsked, keyOf, CAP, heardCount, factLines,
+  createMemory, remember, gossipOnce, noteAsked, keyOf, CAP, heardCount, factLines, toHeard,
 } from './memory.mjs';
 import {
-  buildMessages, classifyIntent, violations, personaLines, relationLine, playerCardLines, MODEL,
+  buildMessages, buildGossipMessages, classifyIntent, violations, personaLines, relationLine, playerCardLines, MODEL,
 } from './dialogue.mjs';
 
 const cast = JSON.parse(fs.readFileSync(new URL('./cast.json', import.meta.url)));
@@ -195,15 +205,20 @@ for (const [cat, items] of Object.entries(report)) {
 console.log(`\n합계 ${totalPass}/${totalPass + totalFail}${totalFail ? `  (실패 ${totalFail})` : ''}`);
 console.log('SAM 호출: 0회 (구조 검사만)');
 
-// ── --live: 최소 실호출 4회로 실제 SAM 응답을 검증한다 ──────
+// ── --live 공통: SAM 한 번 부르기 ────────────────────────────
+const BASE = 'http://127.0.0.1:8790';
+async function callSAM(messages, max_tokens = 60) {
+  const r = await fetch(BASE + '/api/sam/generate', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: MODEL.fast, messages, temperature: 0.7, max_tokens }),
+  });
+  const j = await r.json().catch(() => ({}));
+  return String(j.choices?.[0]?.message?.content || '').trim() || '(빈 응답)';
+}
+
+// ── ① 4턴 대화 — SAM 호출 4회 ────────────────────────────────
 async function liveProbe() {
-  const BASE = 'http://127.0.0.1:8790';
-  const health = await fetch(BASE + '/api/health').then(r => r.json()).catch(() => null);
-  if (!health || (health.sam !== 'ready' && health.sam !== 'bridge')) {
-    console.log('\n[live] SAM 준비 안 됨 (' + (health?.sam || '서버 없음') + ') — node spum/serve.mjs 를 먼저 띄워라. 스킵.');
-    return;
-  }
-  console.log(`\n[live] SAM 실호출 4회 · 모델 ${MODEL.fast} · ${nameOf(round, NPC)} 와의 대화 하나로 6개 기준을 훑는다`);
+  console.log(`\n[live ①] 대화 하나 · 모델 ${MODEL.fast} · ${nameOf(round, NPC)} 와의 4턴으로 6개 기준을 훑는다`);
   const mem = createMemory(round, NPC);
   const script = [
     '어젯밤 어디 있었어?',          // SPEECH ACT: ASK_WHEREABOUTS
@@ -215,20 +230,84 @@ async function liveProbe() {
   for (const userText of script) {
     const intent = classifyIntent(userText);
     const msgs = buildMessages({ round, id: NPC, world: premise.world, history, userText, intent, mem, persona: persona[NPC], playerCard });
-    const r = await fetch(BASE + '/api/sam/generate', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: MODEL.fast, messages: msgs, temperature: 0.7, max_tokens: 60 }),
-    });
-    const j = await r.json().catch(() => ({}));
-    const text = String(j.choices?.[0]?.message?.content || '').trim() || '(빈 응답)';
+    const text = await callSAM(msgs);
     const v = violations(round, NPC, text, mem);
     console.log(`\n  플레이어: ${userText}`);
     console.log(`  ${nameOf(round, NPC)}: ${text}`);
     console.log(`  KNOWLEDGE 검증: ${v.ok ? '✓ 승인된 사실 안에서만 말함' : '✗ 위반 — ' + JSON.stringify(v.hits)}`);
     history.push({ who: 'player', text: userText }, { who: 'npc', text });
   }
-  console.log('\n[live] CHARACTER(말투가 미누답게 짧고 담담한가)와 CONTEXT(2턴이 1턴을 실제로 이었는가)는');
-  console.log('       위 전사를 눈으로 확인해라 — 이 판단만은 SAM 을 한 번 더 불러 채점하지 않는다(토큰 절약).');
+  console.log('\n  CHARACTER(말투가 캐릭터답게)와 CONTEXT(2턴이 1턴을 실제로 이었는가)는');
+  console.log('  위 전사를 눈으로 확인해라 — 이 판단만은 SAM 을 한 번 더 불러 채점하지 않는다(토큰 절약).');
 }
 
-if (process.argv.includes('--live')) await liveProbe();
+// ── ② 소문 출처 보존 — SAM 호출 2회 ──────────────────────────
+// A(직접 목격자) → B(전해 들음) → C. B가 C에게 말할 때 "출처를 밝혀 말한다"는
+// 지침(buildGossipMessages 의 heard=true 분기)을 SAM 이 실제 문장에서 지키는지 본다.
+async function probeGossipProvenance() {
+  const [A, B, C] = [CAST[0].id, CAST[1].id, CAST[2].id];
+  const kA = knowledgeOf(round, A);
+  const [hour, room] = [kA.own[0].hour, kA.own[0].room];
+  console.log(`\n[live ②] 소문 2단계 전파 · ${nameOf(round, A)} → ${nameOf(round, B)} → ${nameOf(round, C)}`);
+
+  // 1단계: A가 자기 자리를 B에게 직접 말한다 (목격 그대로, 출처 표시 불필요)
+  const factAB = `${hour}에 ${room}에 있었다`;
+  const msgsAB = buildGossipMessages({ round, speakerId: A, listenerId: B, persona: persona[A], fact: factAB, kind: 'own' });
+  const textAB = await callSAM(msgsAB, 70);
+  console.log(`\n  ${nameOf(round, A)} → ${nameOf(round, B)}: ${textAB}`);
+
+  // B의 기억에 "A 한테 들음" 으로 얹는다 — 이건 memory.mjs 가 이미 보장하는 부분(하니스 구조검사에서 확인됨)
+  const memB = createMemory(round, B);
+  const heardEntry = toHeard(round, { k: 'own', hour, room, who: A }, A);
+  remember(memB, heardEntry);
+
+  // 2단계: B가 C에게 "전해 들은 것"으로 말한다 — kind:'place' 라 heard=true 로 지침이 바뀐다
+  const factBC = `${nameOf(round, A)} 말로는 ${hour}에 ${room}에 있었다더라`;
+  const msgsBC = buildGossipMessages({ round, speakerId: B, listenerId: C, persona: persona[B], fact: factBC, kind: 'place' });
+  const textBC = await callSAM(msgsBC, 70);
+  console.log(`  ${nameOf(round, B)} → ${nameOf(round, C)}: ${textBC}`);
+
+  // "-았대/-었대/-였대" 는 한국어 표준 전언 어미("~라고 했대"의 준말)다 — "말로는" 없이도 이것만으로 충분히 출처를 밝힌 것이다.
+  const attributed = /말로는|말이야|라던데|그러던데|라고 했|들었는데|한테 들었|았대|었대|였대|한대\b|는대\b/.test(textBC);
+  const claimedDirect = /내가\s*(직접\s*)?봤|직접\s*목격/.test(textBC);
+  console.log(`  ${attributed ? '✓' : '✗'} B→C 발화에 전언 표지가 있다(직접 본 게 아니라고 밝힘)`);
+  console.log(`  ${!claimedDirect ? '✓' : '✗'} B→C 발화가 직접 목격으로 둔갑하지 않는다`);
+  return attributed && !claimedDirect;
+}
+
+// ── ③ 거짓 전제 방어 — SAM 호출 1회 ──────────────────────────
+// "아까 네가 X라고 했잖아" — NPC 가 실제로 한 적 없는 말을 있었다고 우기면
+// NPC 는 받아들이면 안 된다(§14.1). violations() 를 그대로 재사용해 판정한다:
+// NPC 가 이 거짓 전제를 사실인 것처럼 따라 말하면 그 자체로 승인 안 된 (시각,장소) 쌍이 된다.
+async function probeFalsePremise() {
+  // "네가" 는 지금 말을 거는 상대 — 즉 NPC 자신이다. 그러니 가짜 전제도 NPC 자신의 사실을 기준으로
+  // 지어야 한다 (다른 캐릭터의 사실을 섞으면 "네가"의 지시 대상과 검증 대상이 어긋난다).
+  const k = knowledgeOf(round, NPC);
+  const fakeRoom = ROOMS.find(r => r !== k.own[0].room);
+  const claim = `아까 네가 ${k.own[0].hour}엔 ${fakeRoom}에 있었다고 했잖아. 그거 진짜야?`;
+  console.log(`\n[live ③] 거짓 전제 방어 · ${nameOf(round, NPC)}에게 자기가 안 한 말을 했다고 우겨본다`);
+  console.log(`  플레이어: ${claim}`);
+  const mem = createMemory(round, NPC);
+  const msgs = buildMessages({ round, id: NPC, world: premise.world, userText: claim, intent: classifyIntent(claim), mem, persona: persona[NPC], playerCard });
+  const text = await callSAM(msgs, 70);
+  console.log(`  ${nameOf(round, NPC)}: ${text}`);
+  // NPC 가 (거짓 전제를 그대로 따라 하며) 자기가 안 가본 방을 사실처럼 말했는지를 본다 —
+  // violations() 를 그대로 재사용한다: 그 방이 나오면 자동으로 승인 안 된 (시각,방) 쌍이 된다.
+  const v = violations(round, NPC, text, mem);
+  const pass = v.ok || !text.includes(fakeRoom);
+  console.log(`  ${pass ? '✓' : '✗'} NPC 가 거짓 전제를 사실처럼 따라 말하지 않는다${pass ? '' : ` — "${fakeRoom}" 을 그대로 따라 말함`}`);
+  return pass;
+}
+
+if (process.argv.includes('--live')) {
+  const health = await fetch(BASE + '/api/health').then(r => r.json()).catch(() => null);
+  if (!health || (health.sam !== 'ready' && health.sam !== 'bridge')) {
+    console.log('\n[live] SAM 준비 안 됨 (' + (health?.sam || '서버 없음') + ') — node spum/serve.mjs 를 먼저 띄워라. 스킵.');
+  } else {
+    await liveProbe();
+    const ok2 = await probeGossipProvenance();
+    const ok3 = await probeFalsePremise();
+    console.log(`\n[live] 자동 판정 — ② 소문 출처: ${ok2 ? '✓ 통과' : '✗ 실패(위 문장 확인)'} · ③ 거짓 전제 방어: ${ok3 ? '✓ 통과' : '✗ 실패(위 문장 확인)'}`);
+    console.log('SAM 호출 7회 (①4 + ②2 + ③1). 위는 자동 판정이지만 매 실행마다 SAM 이 다르게 답할 수 있으니 실패가 뜨면 여러 번 돌려 재현되는지 봐라.');
+  }
+}
