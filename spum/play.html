@@ -463,6 +463,21 @@ function roomToGrid(roomName) {
 }
 
 // ── 플레이어 이동 ───────────────────────────────────────────
+// 키를 누르고 있는 동안 계속 걷는다. keydown 은 브라우저/OS 자동반복에
+// 기대지 않는다 — 그건 환경마다 반복 속도가 다르거나 아예 안 터져서
+// "누르면 한두 칸 가다 멈추는" 증상의 원인이었다. 대신 눌린 키를 직접
+// 추적해서, 한 칸 이동이 끝날 때마다(매 tick) 다음 칸을 스스로 이어 붙인다.
+const DIR_BY_CODE = { KeyW:[0,-1], KeyS:[0,1], KeyA:[-1,0], KeyD:[1,0],
+  ArrowUp:[0,-1], ArrowDown:[0,1], ArrowLeft:[-1,0], ArrowRight:[1,0] };
+const heldDirs = new Set();
+function tryStepPlayer() {
+  if (playerMoving) return;
+  for (const code of heldDirs) {
+    const d = DIR_BY_CODE[code]; if (!d) continue;
+    const nx = playerGrid.x + d[0], ny = playerGrid.y + d[1];
+    if (isWalkable(nx, ny)) { startPlayerMove([{ x: nx, y: ny }]); return; }
+  }
+}
 function startPlayerMove(path) { if (!path || !path.length || playerMoving) return; playerPath = path; playerStep = 0; playerMoving = true; }
 function updatePlayer(dt) {
   if (!playerMoving) return;
@@ -554,14 +569,30 @@ function updateNPCs(dt) {
 
 // ── 근접 감지 ───────────────────────────────────────────────
 const PROXIMITY = 2;
-let nearestNPC = null, proximityPulse = 0;
+const LANDMARK_PROXIMITY = 2.2;
+let nearestNPC = null, nearestLandmark = null, proximityPulse = 0;
 function updateProximity() {
   nearestNPC = null; let minD = Infinity;
   NPCS().forEach(c => {
-    const s = npcState[c.id]; const d = Math.hypot(s.gx - playerGrid.x, s.gy - playerGrid.y);
+    const s = npcState[c.id]; if (!s) return;
+    const nx = s.moving ? s.px / TS : s.gx;
+    const ny = s.moving ? s.py / TS : s.gy;
+    const d = Math.min(Math.hypot(s.gx - playerGrid.x, s.gy - playerGrid.y), Math.hypot(nx - playerGrid.x, ny - playerGrid.y));
     if (d < PROXIMITY && d < minD) { minD = d; nearestNPC = c.id; }
   });
   if (nearestNPC && !cur) { cur = nearestNPC; renderRoster(); renderLog(); }
+
+  nearestLandmark = null; let minLd = Infinity;
+  const lms = spumMap?.landmarks || [];
+  for (const lm of lms) {
+    const d = Math.hypot(lm.x - playerGrid.x, lm.y - playerGrid.y);
+    if (d < LANDMARK_PROXIMITY && d < minLd) { minLd = d; nearestLandmark = lm; }
+  }
+}
+function inspectLandmark(lm) {
+  if (!lm) return;
+  const desc = lm.desc || `${lm.name}이다.`;
+  sysLine(`[조사] ${lm.name} — ${desc}`);
 }
 // ── 입소문 ──────────────────────────────────────────────────
 // 같은 자리에 오래 서 있으면 한 조각씩 주고받는다. 받은 쪽은 출처를 달아 기억한다.
@@ -593,11 +624,17 @@ async function phraseGossip(speakerId, listenerId, g, fallback) {
     const msgs = buildGossipMessages({ round, speakerId, listenerId,
       persona: castPersona[speakerId], fact: fallback, kind: (g.src || g.entry).k });
     const r = await fetch('/api/sam/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: MODEL.fast, messages: msgs, temperature: 1, max_tokens: 90 }) });
+      body: JSON.stringify({ model: MODEL.fast, messages: msgs, temperature: 0.85, max_tokens: 90 }) });
     if (r.status === 429) { samCooldownUntil = Date.now() + 45000; return fallback; }
     const j = await r.json();
-    const t = String(j.choices?.[0]?.message?.content || '').trim();
+    let t = String(j.choices?.[0]?.message?.content || '').trim();
     if (!t) return fallback;
+    if (t.includes('\n\n')) {
+      const match = t.match(/"([^"]+)"/);
+      if (match) t = match[1];
+      else t = t.split('\n')[0].trim();
+    }
+    t = t.replace(/^["'“](.*)["'”]$/, '$1').trim();
     // 지어낸 시각·장소·사람이 섞이면 버리고 기본 문장으로 돌아간다
     return violations(round, speakerId, t, memories[speakerId]).ok ? t : fallback;
   } catch { return fallback; }
@@ -650,7 +687,7 @@ function updateGossip() {
 }
 
 // ── 키보드 ──────────────────────────────────────────────────
-// W/A/S/D · ↑↓←→ 걷기 · E 말 걸기 · Space 대화 시작/이어가기 · Esc 닫기 · Tab 증언판
+// W/A/S/D · ↑↓←→ 걷기 · E 말 걸기/조사 · Space 대화 시작/이어가기 · Esc 닫기 · Tab 증언판
 window.addEventListener('keydown', e => {
   const typing = document.activeElement?.tagName === 'INPUT';
 
@@ -660,9 +697,11 @@ window.addEventListener('keydown', e => {
   if (e.key === 'Tab') { e.preventDefault(); toggleBoard(); return; }
   if (typing) return;
 
-  const dir = { ArrowUp:[0,-1], ArrowDown:[0,1], ArrowLeft:[-1,0], ArrowRight:[1,0], w:[0,-1], s:[0,1], a:[-1,0], d:[1,0], W:[0,-1], S:[0,1], A:[-1,0], D:[1,0] }[e.key];
-  if (dir && !playerMoving) { e.preventDefault(); const nx = playerGrid.x + dir[0], ny = playerGrid.y + dir[1]; if (isWalkable(nx, ny)) startPlayerMove([{ x: nx, y: ny }]); }
-  if ((e.key === 'e' || e.key === 'E') && nearestNPC) { cur = nearestNPC; renderRoster(); renderLog(); openChat(); }
+  if (DIR_BY_CODE[e.code]) { e.preventDefault(); heldDirs.add(e.code); tryStepPlayer(); }
+  if (e.key === 'e' || e.key === 'E') {
+    if (nearestNPC) { cur = nearestNPC; renderRoster(); renderLog(); openChat(); }
+    else if (nearestLandmark) { inspectLandmark(nearestLandmark); }
+  }
   // Space — 대화창이 닫혀 있으면 가까운 NPC 와 시작, 열려 있으면 입력칸으로 돌아간다
   if (e.key === ' ' || e.code === 'Space') {
     e.preventDefault();
@@ -671,16 +710,20 @@ window.addEventListener('keydown', e => {
       // 옆에 사람이 있으면 그 사람과, 없으면 마지막으로 이야기하던 상대와 이어간다
       const who = nearestNPC || cur;
       if (who) { cur = who; renderRoster(); renderLog(); openChat(); }
+      else if (nearestLandmark) { inspectLandmark(nearestLandmark); }
     }
   }
 });
+window.addEventListener('keyup', e => { heldDirs.delete(e.code); });
+// 탭을 벗어나거나(alt-tab) 창이 포커스를 잃으면 keyup 을 못 받는다 — 키가 눌린 채로 박제된다
+window.addEventListener('blur', () => heldDirs.clear());
 
 // ── 그리기 ──────────────────────────────────────────────────
 let frame = 0, lastTick = performance.now();
 function tick(now = performance.now()) {
   frame = (frame + 1) % 15;
   const dt = (now - lastTick) / 16.667; lastTick = now;
-  updatePlayer(dt); updateNPCs(dt); updateProximity(); updateGossip();
+  updatePlayer(dt); tryStepPlayer(); updateNPCs(dt); updateProximity(); updateGossip();
   proximityPulse = (proximityPulse + dt * 0.05) % (Math.PI * 2);
   // SPUM 런타임이 #scene을 자체 rAF로 관리. 위치만 동기화.
   if (spumReady) syncSPUM();
@@ -737,6 +780,14 @@ function drawOverlay() {
       lines.forEach((l, i) => cx.fillText(l, px + TS / 2, by + 26 + i * 22));
     }
   });
+  if (nearestLandmark && !nearestNPC) {
+    const lx = nearestLandmark.x * TS + TS / 2, ly = nearestLandmark.y * TS;
+    const pulse = 0.5 + 0.5 * Math.sin(proximityPulse);
+    cx.font = '700 12px "Pretendard",system-ui'; cx.textAlign = 'center';
+    cx.fillStyle = `rgba(232,137,74,${0.7 + pulse * 0.3})`;
+    cx.fillText(`[E] ${nearestLandmark.name} 조사`, lx, ly - 8);
+    cx.textAlign = 'left';
+  }
   cx.textAlign = 'left';
 }
 
@@ -751,6 +802,15 @@ function sceneClick(ev) {
     if (d < bd) { bd = d; best = c.id; }
   });
   if (best) { cur = best; renderRoster(); renderLog(); openChat(); }
+  else {
+    const lms = spumMap?.landmarks || [];
+    let bestLm = null, bld = 2.5;
+    for (const lm of lms) {
+      const d = Math.hypot(lm.x + .5 - x, lm.y + .5 - y);
+      if (d < bld) { bld = d; bestLm = lm; }
+    }
+    if (bestLm) inspectLandmark(bestLm);
+  }
 }
 function renderRoster() {
   const r = $('#roster'); r.innerHTML = '';
@@ -816,9 +876,30 @@ function record(aboutId, hour, room, kind, by) {
   if (by && by !== 'player') (discovered[cur] ||= new Set()).add(hour + '|' + room);
   renderBoard();
 }
+
+function parseHoursInSentence(sent) {
+  const list = [];
+  const re = /(21|22|23|00|01|02|\b0\b|\b1\b|\b2\b|\b9\b|\b10\b|\b11\b|\b12\b)\s*시/g;
+  let m;
+  while ((m = re.exec(sent)) !== null) {
+    let n = parseInt(m[1], 10);
+    if (n === 9) n = 21;
+    else if (n === 10) n = 22;
+    else if (n === 11) n = 23;
+    else if (n === 12 || n === 0) n = 0;
+    let norm = null;
+    if (n === 0) norm = '00시';
+    else if (n === 1) norm = '01시';
+    else if (n === 2) norm = '02시';
+    else if (n >= 21 && n <= 23) norm = n + '시';
+    if (norm) list.push({ h: norm, i: m.index });
+  }
+  return list;
+}
+
 // 대화에서 「누가 · 몇 시에 · 어디」를 뽑아 증언판에 올린다.
 // 문장 단위로 보고, 방과 가장 가까운 시각을 짝짓는다.
-// 시각을 빼먹은 답("텃밭에 있었어")은 직전 화제의 시각으로 잇는다.
+// 시각을 빼먹은 답("텃밭에 있었어")은 직전 화제의 시각 혹은 해당 인물의 방 동선으로 잇는다.
 function harvest(speaker, text, askedHour = null) {
   const t = topic[speaker] || {};
   let lastHour = askedHour || t.hour || null;
@@ -833,7 +914,7 @@ function harvest(speaker, text, askedHour = null) {
     if (!sent.trim()) continue;
     const rs = ROOMS.map(r => ({ r, i: sent.indexOf(r) })).filter(x => x.i >= 0);
     if (!rs.length) continue;
-    const hs = HOURS.map(h => ({ h, i: sent.indexOf(h) })).filter(x => x.i >= 0);
+    const hs = parseHoursInSentence(sent);
     if (hs.length) {
       rs.forEach(({ r, i }) => {
         const near = hs.reduce((a, b) => Math.abs(b.i - i) < Math.abs(a.i - i) ? b : a);
@@ -841,6 +922,14 @@ function harvest(speaker, text, askedHour = null) {
       });
     } else if (lastHour) {
       rs.forEach(({ r }) => put(lastHour, r, sent));
+    } else if (speaker !== 'player' && round) {
+      const k = knowledgeOf(round, speaker);
+      rs.forEach(({ r }) => {
+        const matchOwn = k.own.filter(o => o.room === r);
+        if (matchOwn.length) matchOwn.forEach(o => put(o.hour, r, sent));
+        else if (k.alibiLie && k.alibiLie.room === r) put(k.alibiLie.hour, r, sent);
+        else put(HOURS[currentHourIndex], r, sent);
+      });
     }
   }
   topic[speaker] = t;
@@ -1094,6 +1183,8 @@ window.__wamc = {
   get mapW() { return MW; }, get mapH() { return MH; },
   get runtime() { return spumRuntime; },
   findPath, isWalkable, startPlayerMove,
+  get nearestNPC() { return nearestNPC; },
+  get nearestLandmark() { return nearestLandmark; },
   get landmarks() { return spumMap ? spumMap.landmarks : []; },
   warp(x, y) { playerGrid.x = x; playerGrid.y = y; playerPx.x = x * TS; playerPx.y = y * TS; },
 };
