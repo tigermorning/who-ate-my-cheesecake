@@ -23,7 +23,7 @@ header.top{display:flex;align-items:center;gap:14px;margin-bottom:14px}
 .pill{background:var(--card);border:1.5px solid var(--line);border-radius:999px;padding:6px 12px;font-weight:700;font-size:13px;box-shadow:var(--shadow)}
 /* 맵과 곁창을 한 줄에 둔다 — 걸으면서 로스터·증언판을 동시에 봐야 한다.
    맵을 위, 창을 아래에 두면 둘 중 하나는 늘 화면 밖이었다. */
-.play{display:grid;grid-template-columns:290px minmax(0,1fr) 320px;gap:14px;align-items:start}
+.play{display:grid;grid-template-columns:230px minmax(0,1fr) 320px;gap:14px;align-items:start}
 /* 곁창은 짧으면 제자리에 붙어 있는다. 높이를 잘라 창 안에 스크롤바를 만들지는 않는다 —
    안내가 그 안에 숨어 버려서 읽히지 않는다. 내용이 길면 그냥 페이지가 스크롤된다. */
 .side{position:sticky;top:14px}
@@ -73,11 +73,13 @@ td.own{background:#EFF7EA}
 /* 위쪽 알약·버튼이 무슨 뜻인지 — 처음 하는 사람은 이걸 몰라서 시계도 예산도 그냥 흘려보낸다 */
 .hud-help{margin-top:10px;border-top:1.5px dashed var(--line);padding-top:9px}
 .hud-help h4{font-size:11.5px;font-weight:800;color:var(--ink-soft);letter-spacing:.06em;margin:0 0 7px}
-.hud-help dl{display:grid;grid-template-columns:auto 1fr;gap:5px 9px;margin:0;font-size:12px;line-height:1.45}
-.hud-help dt{white-space:nowrap;font-weight:800;color:var(--ink);
-  background:var(--cream);border:1px solid var(--line);border-radius:999px;padding:1px 8px;height:fit-content}
+/* 좁아진 왼쪽 칸(230px)에서는 라벨을 옆에 두면 설명 칸이 너무 좁아져 줄바꿈만 늘어난다.
+   라벨을 위에, 설명을 그 아래 전체 폭으로 — 한 줄이라도 덜 접히게 한다. */
+.hud-help dl{margin:0;font-size:11.5px;line-height:1.4}
+.hud-help dt{display:inline-block;font-weight:800;color:var(--ink);
+  background:var(--cream);border:1px solid var(--line);border-radius:999px;padding:1px 7px;margin-top:7px}
 .hud-help dt.btn{background:var(--cream-2);border-color:var(--accent-2)}
-.hud-help dd{margin:0;color:var(--ink-soft)}
+.hud-help dd{margin:2px 0 0;color:var(--ink-soft)}
 .stage .overchat{position:absolute;left:12px;right:12px;bottom:10px;width:auto;z-index:3;
   background:rgba(255,253,248,.78);backdrop-filter:blur(4px);border:1.5px solid rgba(231,211,184,.9);
   border-radius:14px;box-shadow:0 8px 24px rgba(90,60,30,.20);padding:8px 10px;line-height:1.45;
