@@ -125,8 +125,7 @@ dialog::backdrop{background:rgba(60,40,25,.45)}
     <section class="card side">
       <h3>하우스메이트</h3>
       <div id="roster"></div>
-      <p class="note" id="myrole" style="margin-top:10px"></p>
-      <p class="note" id="keys" style="margin-top:6px">
+      <p class="note" id="keys" style="margin-top:10px">
         <b>W A S D</b> · <b>↑ ← ↓ →</b> 걷기 &nbsp;·&nbsp; <b>E</b> 옆 사람에게 말 걸기 &nbsp;·&nbsp;
         <b>Space</b> 대화 시작/이어가기 &nbsp;·&nbsp; <b>Esc</b> 대화 닫기 &nbsp;·&nbsp; <b>Tab</b> 증언판 여닫기
       </p>
@@ -168,12 +167,19 @@ dialog::backdrop{background:rgba(60,40,25,.45)}
       </div>
     </section>
 
-    <section class="card side">
-      <h3>증언판 — 누가 어디 있었다고 했나</h3>
-      <div id="board"></div>
-      <p class="note" style="margin-top:8px">● 본인 진술 · ○ 목격 · 빨강은 같은 시각에 두 곳<br>
-        엿들은 소문은 여기 안 올라간다 — 직접 물어서 확인해라</p>
-    </section>
+    <div class="side" style="display:flex;flex-direction:column;gap:14px">
+      <section class="card" style="margin:0">
+        <h3>너의 역할</h3>
+        <p class="note" id="myrole"></p>
+      </section>
+
+      <section class="card" style="margin:0">
+        <h3>증언판 — 누가 어디 있었다고 했나</h3>
+        <div id="board"></div>
+        <p class="note" style="margin-top:8px">● 본인 진술 · ○ 목격 · 빨강은 같은 시각에 두 곳<br>
+          엿들은 소문은 여기 안 올라간다 — 직접 물어서 확인해라</p>
+      </section>
+    </div>
 
     <!-- 대화창은 아래 overlayChat() 이 맵 위로 옮긴다. 그 전까지만 여기 있는다. -->
     <section class="card" style="grid-column:1/-1">
@@ -742,8 +748,11 @@ function renderRoster() {
       avatar.append(img);
     } else avatar.textContent = CHARACTER_EMOJI[c.id] || '👤';   // SPUM 이 아직 안 구웠을 때만
     const heard = heardCount(memories[c.id]);
-    const t = el('div'); t.append(el('b', null, c.name), el('span', null, c.job + (isNear ? ' · 근처' : '')
-      + ' · 기억 ' + memorySize(memories[c.id]) + (heard ? ' (들은 ' + heard + ')' : '')));
+    // 직업 등 캐릭터 소개는 처음 고를 때 한 번만 보여준다 — 여기서 매번 반복하지 않는다.
+    const bits = [];
+    if (isNear) bits.push('근처');
+    bits.push('기억 ' + memorySize(memories[c.id]) + (heard ? ' (들은 ' + heard + ')' : ''));
+    const t = el('div'); t.append(el('b', null, c.name), el('span', null, bits.join(' · ')));
     d.append(avatar, t);
     d.onclick = () => { cur = c.id; renderRoster(); renderLog(); openChat(); };
     r.append(d);
