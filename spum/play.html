@@ -97,11 +97,12 @@ td.own{background:#EFF7EA}
 .stage .overchat h3{margin-bottom:6px}
 .stage .overchat .quick button{padding:5px 9px;font-size:12px}
 @media (max-width:900px){.stage .overchat{position:static;left:auto;right:auto;max-width:100%;width:auto}}
-dialog{border:none;border-radius:20px;padding:0;box-shadow:0 20px 60px rgba(90,60,30,.3);max-width:520px}
+dialog{border:none;border-radius:20px;padding:0;box-shadow:0 20px 60px rgba(90,60,30,.3);max-width:560px}
 dialog::backdrop{background:rgba(60,40,25,.45)}
 .dlg{padding:22px;background:var(--card)}
 .dlg h2{font-size:20px;margin-bottom:8px}
-.sel{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 4px}
+.sel{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0 4px}
+.sel button{width:100%;text-align:left;white-space:normal;line-height:1.35}
 .sel button.on{background:var(--accent-2);border-color:var(--accent)}
 </style>
 </head>
