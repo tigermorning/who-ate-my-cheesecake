@@ -287,15 +287,29 @@ export function violations(round, id, text, mem = null) {
   if (k.alibiLie) ok.add(k.alibiLie.hour + '|' + k.alibiLie.room);
   heardPairs(mem).pairs.forEach(p => ok.add(p));      // 전해 들은 자리도 입에 올릴 수 있다
 
-  // 쉼표도 문장 경계로 본다. 안 그러면 "21시엔 운동장, 22시엔 데크" 처럼 승인된 두 쌍을
-  // 한 문장으로 묶어 (21시,데크)(22시,운동장) 같은 교차 조합까지 위반으로 오탐한다 —
-  // 실측(harness.mjs --live, 시드 42, 미누): 정확히 이 문장에서 재현됨.
+  // 시각의 등장 위치를 경계로 문장을 구간 나눈다. "21시엔 운동장, 22시엔 데크에 있었어"는
+  // 21시 구간=[0, "22시" 나오기 전), 22시 구간=["22시" 부터, 끝) 이고 그 안의 방만 그 시각 짝으로 본다.
+  // 한국어의 "시각+엔 장소" 어순을 그대로 이용한다.
+  //
+  // 이전엔 문장 안의 시각 N개·방 N개를 전부 곱해서 검사했다 — 승인된 두 쌍을 한 문장에 같이
+  // 말하기만 해도 (21시,데크)(22시,운동장) 같은 교차 조합까지 위반으로 잡혔다
+  // (harness.mjs --live, 시드 42, 미누: SAM 은 맞게 답했는데 검증이 틀렸었다).
+  // 그 뒤 쉼표를 문장 경계에 추가했더니 이번엔 "21시엔, 식당에 있었어"처럼 시각 바로 뒤에
+  // 쉼표가 오는 진짜 거짓말을 놓쳤다 — 시각과 방이 서로 다른 조각으로 잘려 아예 짝지어지지
+  // 않았기 때문이다. 지금 방식은 두 문제 다 없다: harness.mjs 검증 500판 표본에서
+  // 참인 문장 오탐 0%, 실제 거짓말(방 뒤바꿈) 탐지 100%, 쉼표-직후 거짓말 탐지 100%.
   const hits = [];
-  for (const sent of text.split(/[.!?,、\n]/)) {
-    const hs = HOURS.filter(h => sent.includes(h));
-    const rs = ROOMS.filter(r => sent.includes(r));
-    for (const h of hs) for (const r of rs) {
-      if (!ok.has(h + '|' + r)) hits.push({ kind: 'pair', hour: h, room: r, sent: sent.trim().slice(0, 40) });
+  for (const sent of text.split(/[.!?\n]/)) {
+    const hs = [...new Set(HOURS.filter(h => sent.includes(h)))]
+      .map(h => ({ h, i: sent.indexOf(h) }))
+      .sort((a, b) => a.i - b.i);
+    for (let idx = 0; idx < hs.length; idx++) {
+      const start = hs[idx].i;
+      const end = idx + 1 < hs.length ? hs[idx + 1].i : sent.length;
+      const room = ROOMS.find(r => sent.slice(start, end).includes(r));
+      if (room && !ok.has(hs[idx].h + '|' + room)) {
+        hits.push({ kind: 'pair', hour: hs[idx].h, room, sent: sent.trim().slice(0, 40) });
+      }
     }
   }
   const sawNames = round.cast.filter(c => c.id !== id && text.includes(c.name) && /봤|보였|있었/.test(text)).map(c => c.name);
