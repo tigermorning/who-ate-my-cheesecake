@@ -7,9 +7,10 @@ import { factLines, heardPairs, heardNames } from './memory.mjs';
 // SAM 에서 실제로 열려 있는 모델
 export const MODEL = { fast: 'claude-haiku-4-5', normal: 'claude-sonnet-4.6', best: 'claude-opus-4.8' };
 
-// ── 성격 카드 ──────────────────────────────────────────────
-// 성격·말투·내력·관계의 정본은 **CHARACTER_SYSTEM.md** 이고, 그것을 옮겨 담은 것이
-// **SPUM Cast** (`cast.json` 의 persona) 다. 아래 표는 Cast 스키마에 없는 두 가지만 든다:
+// ── 말투 카드 ──────────────────────────────────────────────
+// 인물의 정본은 **CHARACTER_SYSTEM.md** 이고, 그것을 옮겨 담은 것이
+// **SPUM Cast** (`cast.json` 의 persona) 다. 성격은 따로 나열하지 않는다 —
+// **SPUM Cast 가 주는 `mbti` 칸**을 쓴다. 아래 표는 Cast 스키마에 없는 두 가지만 든다:
 //   · tendency — 말수 (응답 길이 가이드로 쓴다)
 //   · shots    — 말투 예문 (few-shot)
 // ⚠️ 예문에 사건 정보(시각·장소·목격)나 개인사를 넣지 않는다. CHARACTER_SYSTEM.md §13 —
@@ -175,8 +176,8 @@ export function personaLines(persona, fallbackTone = '') {
   const pf = persona.profile || {};
   const head = [pf.age ? pf.age + '세' : '', persona.occupation || '', pf.living || ''].filter(Boolean);
   if (head.length) L.push('기본: ' + head.join(' · '));
-  const p = [].concat(persona.personality || []).filter(Boolean);
-  if (p.length) L.push('성격: ' + p.join(' · '));
+  // MBTI 는 SPUM Cast 가 캐릭터에게 주는 칸이다. 성격을 따로 나열하는 대신 이것을 쓴다.
+  if (persona.mbti) L.push('MBTI: ' + persona.mbti + ' — 이 유형이 할 법한 반응을 고른다');
   const tend = [].concat(pf.tendencies || []).filter(Boolean);
   // 경향이지 규칙이 아니다 — 반응을 고정하지 말고 고를 확률만 기울인다 (§5.4).
   if (tend.length) L.push('경향 (규칙이 아니라 기울기다): ' + tend.join(' / '));
@@ -202,7 +203,7 @@ export function relationLine(persona, otherId, otherName) {
 }
 
 // 플레이어 쪽은 「누구인가」만 넘긴다 — 나이·직업·생활까지.
-// 성격 목록·경향·말투는 넘기지 않는다. 말은 사람이 직접 치는 것이고 채점 대상이 아니다 (§8).
+// MBTI·경향·말투는 넘기지 않는다. 말은 사람이 직접 치는 것이고 채점 대상이 아니다 (§8).
 export function playerCardLines(card) {
   if (!card) return [];
   const head = [card.age ? card.age + '세' : '', card.occupation || ''].filter(Boolean).join(' · ');

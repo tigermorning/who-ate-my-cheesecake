@@ -25,16 +25,19 @@
 (SPUM Cast 스키마 + `persona.profile`) 이고, 판을 돌리는 최소 정보만 `spum/round.mjs` 의 `CAST` 에 있다.
 아래 표는 요약이고, 장비/색 값은 파일을 봐라.
 
-| ID | 이름 | 나이 | 직업 | body | helmet |
-|---|---|---|---|---|---|
-| sgn_haru | 하루 | 34 | 소프트웨어 개발자 | legacy_body_human_1 | modernpackver1_hoodie |
-| sgn_minu | 미누 | 42 | 초등학교 교사 | legacy_body_human_4 | elf_helmet_17 |
-| sgn_lulu | 루루 | 27 | 카페 매니저 | legacy_body_elf_1 | elf_helmet_06 |
-| sgn_peach | 피치 | 51 | 보험사 직원 | legacy_body_human_3 | elf_helmet_12 |
-| sgn_coco | 코코 | 31 | 프리랜스 디자이너 | legacy_body_human_2 | legacy_helmet_1 |
-| sgn_ruby | 루비 | 23 | 대학원생 | legacy_body_human_1 | elf_helmet_12 |
+| ID | 이름 | 나이 | 직업 | MBTI | body | helmet |
+|---|---|---|---|---|---|---|
+| sgn_haru | 하루 | 34 | 소프트웨어 개발자 | ISTP | legacy_body_human_1 | modernpackver1_hoodie |
+| sgn_minu | 미누 | 42 | 초등학교 교사 | INFJ | legacy_body_human_4 | elf_helmet_17 |
+| sgn_lulu | 루루 | 27 | 카페 매니저 | ESFP | legacy_body_elf_1 | elf_helmet_06 |
+| sgn_peach | 피치 | 51 | 보험사 직원 | ESTJ | legacy_body_human_3 | elf_helmet_12 |
+| sgn_coco | 코코 | 31 | 프리랜스 디자이너 | INTP | legacy_body_human_2 | legacy_helmet_1 |
+| sgn_ruby | 루비 | 23 | 대학원생 | ENFP | legacy_body_human_1 | elf_helmet_12 |
 
-각 캐릭터가 드는 것: 나이·직업·생활 형태·생활 루틴·과거 1~2줄·성격 경향·관심사·동기·민감한 부분,
+**성격은 따로 나열하지 않는다 — SPUM Cast 가 주는 `mbti` 칸을 쓴다.** 이 게임은 SPUM/SAM 데모라
+SPUM 이 제공하는 칸을 최대한 쓰는 쪽이 맞다. MBTI 는 CHARACTER_SYSTEM.md 의 성격 경향에서 골랐다.
+
+각 캐릭터가 드는 것: 나이·직업·생활 형태·생활 루틴·과거 1~2줄·MBTI·성격 경향·관심사·동기·민감한 부분,
 그리고 나머지 다섯과의 **관계 한 줄**(`persona.profile.relations`). 그 이상은 넣지 않는다 —
 CHARACTER_SYSTEM.md §15·§16 이 금지한다. 대화가 어색하면 설정을 늘리는 대신
 문맥·화행·관계·감정·기억을 손본다.

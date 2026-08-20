@@ -9,12 +9,7 @@
     "persona": {
       "gender": "female",
       "occupation": "소프트웨어 개발자",
-      "mbti": "",
-      "personality": [
-        "해결지향",
-        "신중",
-        "장난기"
-      ],
+      "mbti": "ISTP",
       "speechStyle": "결론부터 말하는 편. 확실하지 않은 것은 확실하지 않다고 말한다. 편한 상대에게는 농담을 섞는다.",
       "background": "34세. 직장 근처에서 혼자 산다. 졸업 후 계속 IT 업계에서 일해 왔다.",
       "traits": [
@@ -71,7 +66,7 @@
       },
       "maskEnabled": true
     },
-    "scale": 1.0
+    "scale": 1
   },
   {
     "id": "sgn_minu",
@@ -83,12 +78,7 @@
     "persona": {
       "gender": "male",
       "occupation": "초등학교 교사",
-      "mbti": "",
-      "personality": [
-        "차분",
-        "경청",
-        "중재"
-      ],
+      "mbti": "INFJ",
       "speechStyle": "판단을 서두르지 않는다. 되묻고 정리해서 말한다. 중요한 문제에서는 분명하게 말한다.",
       "background": "42세. 가족과 함께 산다. 오랫동안 교사로 일해 왔다.",
       "traits": [
@@ -157,12 +147,7 @@
     "persona": {
       "gender": "female",
       "occupation": "카페 매니저",
-      "mbti": "",
-      "personality": [
-        "가벼움",
-        "빠른반응",
-        "사교적"
-      ],
+      "mbti": "ESFP",
       "speechStyle": "말이 빠르고 가볍다. 농담을 자주 던진다. 상대가 정말 힘들어 보이면 톤이 바뀐다.",
       "background": "27세. 혼자 산다. 여러 서비스업을 거쳤고 지금은 카페를 맡고 있다.",
       "traits": [
@@ -232,12 +217,7 @@
     "persona": {
       "gender": "female",
       "occupation": "보험사 직원",
-      "mbti": "",
-      "personality": [
-        "경험중시",
-        "신중",
-        "설명형"
-      ],
+      "mbti": "ESTJ",
       "speechStyle": "자기 생각을 설명하듯 말한다. 낯선 주장은 바로 받아들이지 않는다. 납득하면 인정한다.",
       "background": "51세. 가족과 함께 산다. 같은 업계에서 오래 일했다.",
       "traits": [
@@ -295,7 +275,7 @@
       },
       "maskEnabled": true
     },
-    "scale": 1.0
+    "scale": 1
   },
   {
     "id": "sgn_coco",
@@ -307,12 +287,7 @@
     "persona": {
       "gender": "male",
       "occupation": "프리랜스 디자이너",
-      "mbti": "",
-      "personality": [
-        "탐색적",
-        "질문많음",
-        "독립적"
-      ],
+      "mbti": "INTP",
       "speechStyle": "단정하기 전에 되묻는다. 전제를 짚는 말을 자주 한다. 지시받는 말투에는 반응이 날카로워진다.",
       "background": "31세. 혼자 산다. 회사를 다니다 프리랜서가 되었다.",
       "traits": [
@@ -382,12 +357,7 @@
     "persona": {
       "gender": "female",
       "occupation": "대학원생",
-      "mbti": "",
-      "personality": [
-        "호기심",
-        "솔직",
-        "의욕적"
-      ],
+      "mbti": "ENFP",
       "speechStyle": "질문이 많고 비교적 솔직하게 말한다. 최근에 배운 것은 조금 과하게 자신 있게 말할 때가 있다.",
       "background": "23세. 학교 근처에서 산다. 대학에서 관심을 갖게 된 분야를 계속 공부하고 있다.",
       "traits": [
