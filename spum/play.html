@@ -332,7 +332,7 @@ const chat = {}, board = {}, topic = {}, discovered = {};
 const castPersona = {}, castPersonaAll = {};
 // NPC 마다 하나씩. 판이 새로 시작될 때만 갈아 끼운다.
 const memories = {};
-const gossipAt = {}, gossipTurn = {};
+const gossipAt = {}, gossipTurn = {}, gossipExchanges = {};
 let gossipCount = 0;
 let llmReady = false;
 let currentHourIndex = 0, hourTimer = 0;
@@ -547,6 +547,7 @@ function updateProximity() {
 // 플레이어의 증언판에는 자동으로 오르지 않는다 — 가까이 있어서 엿들어야 올라간다.
 const GOSSIP_RANGE = 2.5;      // 이 안에 들어와야 말을 섞는다
 const GOSSIP_COOLDOWN = 21000; // 같은 짝은 이 간격으로만 — 너무 빨리 오가면 읽을 틈이 없다
+const GOSSIP_PAIR_CAP = 4;     // 같은 짝은 한 판에서 최대 이만큼만 — 나눌 소재가 안 마르면 붙어 있는 한 무한정 이어진다
 const EARSHOT = 5;             // 플레이어가 이 안에 있으면 엿듣는다
 
 function sysLine(text) {
@@ -592,13 +593,19 @@ function updateGossip() {
       if (!sa || !sb) continue;
       if (Math.hypot(sa.gx - sb.gx, sa.gy - sb.gy) > GOSSIP_RANGE) continue;
       const pair = a.id + '|' + b.id;
-      if (now - (gossipAt[pair] || 0) < GOSSIP_COOLDOWN) continue;
+      const done = gossipExchanges[pair] || 0;
+      if (done >= GOSSIP_PAIR_CAP) continue;   // 이 짝은 이 판에서 할 말을 다 나눴다 — 확실히 멈춘다
+      // 나눌수록 다음 만남까지 조금씩 더 기다리게 한다. 상한만 있으면 마지막 판정에서 뚝 끊겨
+      // 부자연스럽고, 완만한 지연만 있으면 이론상 안 끝난다 — 둘을 같이 쓴다.
+      const cooldown = GOSSIP_COOLDOWN * (1 + 0.5 * done);
+      if (now - (gossipAt[pair] || 0) < cooldown) continue;
       gossipAt[pair] = now;
       // 번갈아 말한다 — 한쪽만 떠드는 그림이 되지 않게
       gossipTurn[pair] = (gossipTurn[pair] || 0) + 1;
       const speaker = gossipTurn[pair] % 2 ? a : b, listener = gossipTurn[pair] % 2 ? b : a;
       const g = gossipOnce(round, memories[speaker.id], memories[listener.id]);
       if (!g) continue;
+      gossipExchanges[pair] = done + 1;
       gossipCount++;
       const base = gossipLine(round, g);
       const ss = npcState[speaker.id];
@@ -978,6 +985,7 @@ function newRound() {
   CAST.forEach(c => { chat[c.id] = []; board[c.id] = {}; topic[c.id] = {}; memories[c.id] = createMemory(round, c.id); });
   Object.keys(gossipAt).forEach(k => delete gossipAt[k]);
   Object.keys(gossipTurn).forEach(k => delete gossipTurn[k]);
+  Object.keys(gossipExchanges).forEach(k => delete gossipExchanges[k]);
   gossipCount = 0; $('#pillGossip').textContent = '소문 0';
   Object.keys(discovered).forEach(k => delete discovered[k]);
   NPCS().forEach(c => {
