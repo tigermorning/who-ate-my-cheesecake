@@ -36,6 +36,7 @@
 * 나이
 * 직업
 * 생활 형태
+* MBTI
 * 생활 루틴
 * 아주 적은 양의 과거 정보
 * 성격적 경향
@@ -213,6 +214,22 @@ Conversation State Update
 * 나이
 * 직업
 * 생활 형태
+* MBTI
+
+### MBTI 를 쓰는 이유와 한계
+
+MBTI 는 **SPUM Cast 가 캐릭터에게 제공하는 칸**(`persona.mbti`)이다.
+이 게임은 SPUM 과 SAM 을 알리는 것이 목적이므로, 성격을 우리 식으로 따로 나열하는 대신
+**SPUM 이 주는 칸을 쓴다.** SPUM Studio 에서 캐릭터를 만들 때도 이 값을 그대로 넣는다.
+
+다만 MBTI 는 **네 글자짜리 요약**이다. 이것 하나로 반응을 정하면 §5.4 가 경계하는
+「고정된 성격」이 된다. 그래서 다음 순서를 지킨다.
+
+> **MBTI 는 출발점, 성격적 경향이 실제 기준이다.**
+> 둘이 어긋나면 **경향을 따른다.**
+
+MBTI 는 캐릭터를 처음 잡을 때의 밑그림이고, 대화 중의 실제 판단은 §5.4 의 경향과
+§7 의 관계, 그리고 지금 오간 말이 결정한다.
 
 ## 5.2 생활 루틴
 
@@ -334,6 +351,7 @@ Conversation State Update
 
 **Age:** 34  
 **Occupation:** Software Developer  
+**MBTI:** ISTP  
 **Living Situation:** 직장 근처에서 혼자 생활
 
 ### 생활 루틴
@@ -377,6 +395,7 @@ Conversation State Update
 
 **Age:** 42  
 **Occupation:** Elementary School Teacher  
+**MBTI:** INFJ  
 **Living Situation:** 가족과 함께 생활
 
 ### 생활 루틴
@@ -420,6 +439,7 @@ Conversation State Update
 
 **Age:** 27  
 **Occupation:** Cafe Manager  
+**MBTI:** ESFP  
 **Living Situation:** 혼자 생활
 
 ### 생활 루틴
@@ -464,6 +484,7 @@ Conversation State Update
 
 **Age:** 51  
 **Occupation:** Insurance Company Employee  
+**MBTI:** ESTJ  
 **Living Situation:** 가족과 함께 생활
 
 ### 생활 루틴
@@ -508,6 +529,7 @@ Conversation State Update
 
 **Age:** 31  
 **Occupation:** Freelance Designer  
+**MBTI:** INTP  
 **Living Situation:** 혼자 생활
 
 ### 생활 루틴
@@ -552,6 +574,7 @@ Conversation State Update
 
 **Age:** 23  
 **Occupation:** Graduate Student  
+**MBTI:** ENFP  
 **Living Situation:** 학교 근처에서 생활
 
 ### 생활 루틴
