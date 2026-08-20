@@ -40,6 +40,10 @@ header.top{display:flex;align-items:center;gap:14px;margin-bottom:14px}
 .who.near{border-color:var(--good);background:rgba(123,178,106,.08)}
 .who b{display:block;font-size:15px}
 .who span{font-size:12px;color:var(--ink-soft)}
+/* 다단 배치 — 오른쪽으로 옮기면서 세로로 길게 쌓이지 않게 2열로 접는다. */
+#roster.grid2{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+#roster.grid2 .who{flex-direction:column;align-items:flex-start;gap:2px;padding:8px 10px}
+#roster.grid2 .who span{font-size:11px}
 /* 너비는 칸에서 오지 않는다 — 곁창을 뺀 나머지를 채우고, 세로도 화면을 넘지 않게 JS 가 max-width 를 건다. */
 .stage{width:100%;margin:0 auto;border-radius:14px;border:1.5px solid var(--line);overflow:hidden;position:relative;background:#2A1F18;line-height:0}
 #bg{position:relative;display:block;width:100%;height:auto;image-rendering:pixelated;z-index:0}
@@ -124,10 +128,7 @@ dialog::backdrop{background:rgba(60,40,25,.45)}
 
   <div class="play">
     <section class="card side">
-      <h3>하우스메이트</h3>
-      <div id="roster"></div>
-      <p class="note" style="margin-top:6px"><b>기억</b> = 아는 것 개수 · <b>들은</b> = 그중 소문으로 안 것</p>
-      <p class="note" id="keys" style="margin-top:10px">
+      <p class="note" id="keys" style="margin-top:0">
         <b>W A S D</b> · <b>↑ ← ↓ →</b> 걷기 &nbsp;·&nbsp; <b>E</b> 옆 사람에게 말 걸기 &nbsp;·&nbsp;
         <b>Space</b> 대화 시작/이어가기 &nbsp;·&nbsp; <b>Esc</b> 대화 닫기 &nbsp;·&nbsp; <b>Tab</b> 증언판 여닫기
       </p>
@@ -170,6 +171,12 @@ dialog::backdrop{background:rgba(60,40,25,.45)}
     </section>
 
     <div class="side" style="display:flex;flex-direction:column;gap:14px">
+      <section class="card" style="margin:0">
+        <h3>하우스메이트</h3>
+        <div id="roster" class="grid2"></div>
+        <p class="note" style="margin-top:6px"><b>기억</b> = 아는 것 개수 · <b>들은</b> = 그중 소문으로 안 것</p>
+      </section>
+
       <section class="card" style="margin:0">
         <h3>너의 역할</h3>
         <p class="note" id="myrole"></p>
