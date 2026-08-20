@@ -557,6 +557,7 @@ const GOSSIP_RANGE = 2.5;      // 이 안에 들어와야 말을 섞는다
 const GOSSIP_COOLDOWN = 21000; // 같은 짝은 이 간격으로만 — 너무 빨리 오가면 읽을 틈이 없다
 const GOSSIP_PAIR_CAP = 4;     // 같은 짝은 한 판에서 최대 이만큼만 — 나눌 소재가 안 마르면 붙어 있는 한 무한정 이어진다
 const EARSHOT = 5;             // 플레이어가 이 안에 있으면 엿듣는다
+const BUBBLE_MS = 16000;       // 말풍선이 떠 있는 시간. drawOverlay() 도 이 값을 본다
 
 function sysLine(text) {
   const bucket = cur ? (chat[cur] ||= []) : (chat.__intro ||= []);
@@ -615,6 +616,12 @@ function updateGossip() {
       if (!g) continue;
       gossipExchanges[pair] = done + 1;
       gossipCount++;
+      // 말풍선이 떠 있는 동안 둘 다 다른 데로 서성이지 않게 자리를 지키게 한다.
+      // 안 그러면 트리거는 분명 가까이서 났는데, 말풍선이 뜬 몇 초 사이 각자 무작위로
+      // 흩어져서 화면에는 "혼자 떠드는" 것처럼 남는다 — npcWander() 의 다음 걸음 타이머를 늦춘다.
+      const holdFrames = BUBBLE_MS / 16.667;
+      if (sa) sa.timer = Math.max(sa.timer || 0, holdFrames);
+      if (sb) sb.timer = Math.max(sb.timer || 0, holdFrames);
       const base = gossipLine(round, g);
       const ss = npcState[speaker.id];
       const inEarshot = Math.hypot(ss.gx - playerGrid.x, ss.gy - playerGrid.y) <= EARSHOT;
@@ -706,7 +713,7 @@ function drawOverlay() {
     if (cur === c.id) { cx.strokeStyle = '#FFB86B'; cx.lineWidth = 2; cx.strokeRect(px - 10, py - 26, TS + 20, TS + 32); }
     // 이름은 SPUM BubbleRenderer 가 캐릭터 위에 이미 그린다 — 여기서 또 그리지 않는다.
     const bub = bubbles[c.id];
-    if (bub && Date.now() - bub.at < 16000) {
+    if (bub && Date.now() - bub.at < BUBBLE_MS) {
       cx.font = '600 17px "Pretendard",system-ui';
       const lines = bub.text.replace(/\n+/g, ' ').match(/.{1,18}/g)?.slice(0, 3) || [];
       const bw = Math.max(...lines.map(l => cx.measureText(l).width)) + 24, bh = lines.length * 22 + 16;
