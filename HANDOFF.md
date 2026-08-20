@@ -1,6 +1,11 @@
 # HANDOFF
 
-> 최종 갱신: 2026-08-19 13:45 (Claude Code). 직전 작업은 **OpenCode** 세션이었고 13:39 에 끊겼다.
+> 최종 갱신: 2026-08-20 (Claude Code). 직전 작업은 **OpenCode** 세션이었고 08-19 13:39 에 끊겼다.
+>
+> **⚠ 브라우저 자동화 방식 전환 (2026-08-20):** SPUM 조작은 이제 **Claude Chrome 확장(`claude-in-chrome`)**
+> 으로 한다. Playwright 스크립트(`spum/studio-*.mjs` · `inject-characters.mjs` · `check-characters.mjs`)는
+> **레거시**다 — 기록용으로만 남긴다. 확장은 로그인된 실제 크롬 창을 직접 몰기 때문에 별도 프로필·
+> Windows/WSL node 구분이 필요 없다. 자세히는 아래 「2026-08-20」 절.
 
 ## 현재 상태
 《Who Ate My Cheesecake?》 — 하우스메이트 추리 게임. `spum/` 에서 플레이.
@@ -115,6 +120,26 @@ SAM 이 `Unknown model: ''` 로 404. `serve.mjs` 는 body 를 그대로 흘리�
 - `node spum/probe-runtime.mjs` — **런타임이 실제로 세우는 칸**을 막힘표와 대조. 여기서 위 두 버그가 잡혔다
 - `REF_PNG=1 node spum/buildtheme.mjs` — 참조 그림을 그대로 깐 판(비교용). 게임에는 안 쓴다
 
+## 2026-08-20 — 브라우저 자동화 방식 전환 (Claude Code)
+
+지금까지 SPUM Studio 조작은 **Playwright 스크립트**(`spum/studio-*.mjs` 등 50여 개)로 했다.
+이 방식은 별도 크롬 프로필(`%TEMP%\spum-chrome-profile`)에 로그인을 붙이고 **Windows node**
+로만 돌려야 했다(WSL node 는 다른 프로필을 봐서 로그인이 없다). 프로세스가 죽으면 브라우저도
+같이 죽는 등 취급이 까다로웠다.
+
+**이제는 Chrome 에 Claude 확장(`claude-in-chrome`)을 깔아 직접 조작한다.**
+- 이미 로그인된 실제 크롬 창을 그대로 몬다 → 전용 프로필·Windows/WSL node 구분 불필요.
+- SPUM Studio 로그인 세션(30분 만료)은 그 크롬 창에 그대로 붙어 있다 — 만료되면
+  화면에서 ACCOUNT → 「다시 로그인」(비번 안 물음, `CLAUDE.md` §급소-2).
+- 페이지 내 JS 실행·`localStorage` 조작·버튼 호출은 확장의 `javascript_tool` 로 한다.
+  큰 반환값은 `[BLOCKED]` 될 수 있으니 **요약해서 반환**(`CLAUDE.md` §4-2).
+- **Playwright 스크립트는 삭제하지 않고 레거시로 남긴다.** 참고·재현용.
+
+게임 본체(`spum/play.html` + `serve.mjs`) 실행 방식은 **그대로**다 — 확장 전환과 무관하다:
+`node spum/serve.mjs`(백그라운드) → `http://127.0.0.1:8790/spum/play.html`.
+
+이 세션에서 서버 기동 + play.html 로드 재확인함: 맵 렌더·캐스트 6종·HUD 정상, 콘솔 오류 0.
+
 ## 다음 할 일
 1. Step 5 (NPC 기억+소통) → Step 6 (LANDMARKS 연결) → Step 7 (데모 검증)
 
@@ -126,9 +151,10 @@ SAM 이 `Unknown model: ''` 로 404. `serve.mjs` 는 body 를 그대로 흘리�
   렌더러 오류는 관측된 적이 없다 — 08-19 복구 실행에서 `page.on('crash')` 무반응, 스크린샷 정상.
   열어두고 보려면 `node spum/repair-characters.mjs` (닫지 않는다), 자동화만 하려면 `--close`.
 - **Cast 목록은 8종씩 페이지가 나뉜다.** 6종이 다 안 보이면 2페이지를 봐라.
-- **Playwright 는 Windows node 로 돌려야 한다.** 프로필이 `%TEMP%\spum-chrome-profile`
-  (= `C:\Users\user\AppData\Local\Temp\spum-chrome-profile`) 에 있고 여기에 SPUM 로그인이 붙어 있다.
+- **[레거시] Playwright 는 Windows node 로 돌려야 했다.** 프로필이 `%TEMP%\spum-chrome-profile`
+  (= `C:\Users\user\AppData\Local\Temp\spum-chrome-profile`) 에 있고 여기에 SPUM 로그인이 붙어 있었다.
   WSL node 로 돌리면 `/tmp/spum-chrome-profile` 을 보게 되어 로그인이 없다.
+  → **2026-08-20 부터 Claude Chrome 확장(`claude-in-chrome`)으로 전환.** 이 프로필 이슈는 이제 무관하다.
 - `cast.json` 의 `scale` 은 Studio 스키마에 없는 우리 자체 필드다. 주입하지 않는다.
 - SPUM 대시보드에 Unity 패키지 다운로드가 있다 (`https://spum.soonsoon.ai/dashboard.html#dashboard-packages`).
   아직 안 써봤다.
