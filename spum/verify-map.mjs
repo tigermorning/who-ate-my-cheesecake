@@ -32,7 +32,7 @@ for (let round = 0; round < 10; round++) {
   await page.waitForTimeout(2500);
   const r = await page.evaluate(() => {
     const g = window.__wamc; if (!g) return null;
-    const map = g.obstacle, W = 32;
+    const map = g.obstacle, W = g.mapW;
     const out = { on: [], n: 0, pos: {} };
     for (const [id, s] of Object.entries(g.npcState)) {
       out.n++; out.pos[id] = s.gx + ',' + s.gy;

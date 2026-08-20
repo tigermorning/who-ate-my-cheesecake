@@ -22,6 +22,75 @@ function loadEnv() {
   return out;
 }
 const env = { ...loadEnv(), ...process.env };
+const STUDIO_EXPORT_JS = String.raw`
+(() => {
+  const PORT = PORT_HERE;
+  const L = k => { try { return JSON.parse(localStorage.getItem(k) || '[]'); } catch { return []; } };
+  const maps = L('sv_studio_maps_v1'), smo = L('sv_studio_smo_v1');
+  if (!maps.length) return console.error('[SPUM→게임] 이 탭에 맵이 없다');
+
+  window.SPUM_EXPORT = async (want) => {
+    const map = want
+      ? maps.find(m => m.id === want || m.name === want)
+      : maps.slice().sort((a, b) => String(b.savedAt).localeCompare(String(a.savedAt)))[0];
+    if (!map) return console.error('[SPUM→게임] 그런 맵이 없다:', want);
+    console.log('[SPUM→게임] 내보낼 맵:', map.name, map.width + 'x' + map.height, map.id);
+
+    const theme = smo.find(o => o.id === map.mapThemeId);
+    const byTileId = new Map(((theme && theme.mapTheme && theme.mapTheme.tiles) || []).map(t => [String(t.id), t]));
+    const ts = map.tilesets.find(t => t.themeId === map.mapThemeId) || map.tilesets.find(t => t.source === 'map-theme');
+    if (!ts) return console.error('[SPUM→게임] map-theme 타일셋이 없다');
+    const props = ts.tileProperties || {};
+    const back = map.layers.find(l => l.type === 'back').data;
+    const used = [...new Set(back.filter(Boolean).map(String))];
+
+    // 타일 그림은 12장씩 끊어 받는다 (한꺼번에 받으면 ERR_INSUFFICIENT_RESOURCES)
+    const img = new Map();
+    for (let i = 0; i < used.length; i += 12) {
+      await Promise.all(used.slice(i, i + 12).map(async pid => {
+        const p = props[pid]; if (!p) return;
+        const t = byTileId.get(String(p.smoTileId)); if (!t) return;
+        const src = t.imageDataUrl || (t.assetId ? '/api/studio/assets/' + encodeURIComponent(t.assetId) : '');
+        if (!src) return;
+        const b = await fetch(src).then(r => r.ok ? r.blob() : null).catch(() => null);
+        if (b) { try { img.set(pid, await createImageBitmap(b)); } catch (e) {} }
+      }));
+      if (i % 240 === 0) console.log('[SPUM→게임] 타일 ' + Math.min(used.length, i + 12) + '/' + used.length);
+    }
+
+    const TS = map.tileSize || 32, COLS = 32;
+    const ids = used.filter(id => img.has(id));
+    const sheet = document.createElement('canvas');
+    sheet.width = COLS * TS; sheet.height = Math.max(1, Math.ceil(ids.length / COLS)) * TS;
+    const g = sheet.getContext('2d'); g.imageSmoothingEnabled = false;
+    const newProps = {};
+    ids.forEach((id, i) => {
+      const cx = i % COLS, cy = Math.floor(i / COLS);
+      g.drawImage(img.get(id), cx * TS, cy * TS, TS, TS);
+      newProps[id] = Object.assign({}, props[id], { sourceCell: { column: cx + 1, row: cy + 1 }, sourceCells: [{ column: cx + 1, row: cy + 1 }] });
+    });
+
+    const out = JSON.parse(JSON.stringify(map));
+    out.tilesets = [Object.assign({}, ts, { tileProperties: newProps, columns: COLS })];
+    out.meta = Object.assign({}, out.meta, { themeSheet: 'house-theme.png', themeTiles: ids.length, fromStudio: true, pulledAt: new Date().toISOString() });
+
+    const r = await fetch('http://127.0.0.1:' + PORT + '/api/import', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ files: { 'house-map.json': out, 'house-theme.png': sheet.toDataURL('image/png') } }),
+    }).then(r => r.json()).catch(e => ({ ok: false, error: String(e) }));
+    console.log('[SPUM→게임] 결과:', r, '· 타일 ' + ids.length + '/' + used.length + ' · 시트 ' + sheet.width + 'x' + sheet.height);
+    if (r.ok) console.log('[SPUM→게임] 끝났다. 게임 탭을 새로고침해라.');
+    return r;
+  };
+
+  console.log('[SPUM→게임] 이 탭의 맵:');
+  maps.slice().sort((a, b) => String(b.savedAt).localeCompare(String(a.savedAt)))
+      .forEach(m => console.log('   ' + m.name + '  (' + m.width + 'x' + m.height + ')  ' + m.id + '  ' + m.savedAt));
+  console.log('[SPUM→게임] 가장 최근 맵을 보낸다. 다른 걸 보내려면  SPUM_EXPORT("맵이름")');
+  window.SPUM_EXPORT();
+})();
+`;
+
 const PORT = Number(env.PORT || 8790);
 // 키 이름이 여러 개다 — 있는 것을 순서대로 쓴다
 // 키 이름이 여러 개다 — 있는 것을 순서대로 쓴다. 시작할 때 한 번 시험해 보고,
@@ -176,11 +245,44 @@ function normalizeSamBody(raw) {
   }
 
   // 아이콘은 없다. 404 로그를 남기지 않는다.
+  // ── Studio 탭에 붙여 넣는 내보내기 스크립트 ────────────────
+  // 사용자 브라우저의 localStorage 가 원본이라, 그 탭에서 직접 실행해야 한다.
+  //   fetch("http://127.0.0.1:8790/studio-export.js").then(r=>r.text()).then(eval)
+  if (url.pathname === '/studio-export.js') {
+    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
+    return res.end(STUDIO_EXPORT_JS.replace(/PORT_HERE/g, String(PORT)));
+  }
+
+  // ── Studio → 게임: 맵을 받아 spum/ 에 쓴다 ────────────────
+  // 로그인된 Studio 탭이 타일 그림을 시트로 합쳐 여기로 보낸다.
+  if (url.pathname === '/api/import' && req.method === 'POST') {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    try {
+      const body = JSON.parse(await readBody(req) || '{}');
+      const wrote = [];
+      for (const [name, value] of Object.entries(body.files || {})) {
+        if (!/^[\w.-]+$/.test(name)) continue;                       // 경로 탈출 금지
+        const dest = path.join(ROOT, 'spum', name);
+        const data = typeof value === 'string' && value.startsWith('data:')
+          ? Buffer.from(value.split(',')[1], 'base64')
+          : Buffer.from(typeof value === 'string' ? value : JSON.stringify(value), 'utf8');
+        fs.writeFileSync(dest, data);
+        wrote.push(name + ' ' + data.length + 'B');
+      }
+      console.log('[import]', wrote.join(' · '));
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ ok: true, wrote }));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ ok: false, error: String(e.message || e) }));
+    }
+  }
+
   if (url.pathname === '/favicon.ico') { res.writeHead(204); return res.end(); }
 
   // ── 키가 붙어 있는지만 알려 준다. 값은 주지 않는다 ─────────
   if (url.pathname === '/api/health') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
     return res.end(JSON.stringify({ sam: SAM_KEY ? 'ready' : (jobs ? 'bridge' : 'missing'), base: SAM_BASE }));
   }
 

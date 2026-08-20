@@ -13,7 +13,7 @@ const STUDIO_URL = 'https://spum.soonsoon.ai/studio/?section=character';
 const SCREENSHOT_DIR = path.join(DIR, 'screenshots');
 
 // 캐릭터 ID 목록
-const TARGET_IDS = ['sgn_haru', 'sgn_mina', 'sgn_coco', 'sgn_lulu', 'sgn_peach', 'sgn_ruby'];
+const TARGET_IDS = ['sgn_haru', 'sgn_minu', 'sgn_coco', 'sgn_lulu', 'sgn_peach', 'sgn_ruby'];
 
 async function main() {
   fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });

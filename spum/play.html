@@ -147,7 +147,11 @@ dialog::backdrop{background:rgba(60,40,25,.45)}
 import { makeRound, knowledgeOf, nameOf, ROOMS, HOURS, CAST } from './round.mjs';
 import { buildMessages, buildGossipMessages, violations, classifyIntent, topicOf, MODEL } from './dialogue.mjs';
 import { createMemory, gossipOnce, gossipLine, noteAsked, memorySize, heardCount } from './memory.mjs';
-import { W as HW, H as HH, SPOT, ZONES, roomOf } from './house.mjs';
+// 도면은 **기본값**일 뿐이다. 맵(house-map.json)이 크기·자리·방을 들고 있으면 그쪽이 정본이다.
+import { W as HW, H as HH, SPOT as SPOT0, ZONES as ZONES0, roomOf as roomOf0 } from './house.mjs';
+let SPOT = JSON.parse(JSON.stringify(SPOT0));
+let ZONES = ZONES0.slice();
+let roomOf = roomOf0;
 import { loadSpumMap } from './spummap.mjs';
 
 const $ = s => document.querySelector(s);
@@ -156,7 +160,7 @@ const el = (t, c, x) => { const e = document.createElement(t); if (c) e.classNam
 // ── 캐릭터 외모 (SPUM equipment) ─────────────────────────────
 const CHARACTER_EQUIP = {
   sgn_haru:  { body: 'legacy_body_human_1', eye: 'legacy_eye_3', helmet: 'modernpackver1_hoodie', clothing: 'modernpackver1_winter1_c2', pants: 'elf_elf_pant_06' },
-  sgn_mina:  { body: 'legacy_body_human_4', eye: 'legacy_eye_3', helmet: 'elf_helmet_17', clothing: 'elf_elf_cloth_09', pants: 'elf_elf_pant_03' },
+  sgn_minu:  { body: 'legacy_body_human_4', eye: 'legacy_eye_3', helmet: 'elf_helmet_17', clothing: 'elf_elf_cloth_09', pants: 'elf_elf_pant_03' },
   sgn_coco:  { body: 'legacy_body_human_2', eye: 'legacy_eye_3', helmet: 'legacy_helmet_1', clothing: 'modernpackver1_hoodie_c2', pants: 'elf_elf_pant_04' },
   sgn_lulu:  { body: 'legacy_body_elf_1', eye: 'legacy_eye_3', helmet: 'elf_helmet_06', clothing: 'legacy_f_sr_cloth', pants: 'legacy_f_sr_pants' },
   sgn_peach: { body: 'legacy_body_human_3', eye: 'legacy_eye_3', helmet: 'elf_helmet_12', clothing: 'modernpackver1_hoodie', pants: 'elf_elf_pant_06' },
@@ -164,14 +168,14 @@ const CHARACTER_EQUIP = {
 };
 const CHARACTER_COLORS = {
   sgn_haru:  { body: '#FFE4B5', helmet: '#FFD700', clothing: '#FFFACD', pants: '#FFF8DC', eye: '#3A3630' },
-  sgn_mina:  { body: '#E6E6FA', helmet: '#9370DB', clothing: '#DDA0DD', pants: '#EE82EE', eye: '#3A3630' },
+  sgn_minu:  { body: '#E6E6FA', helmet: '#9370DB', clothing: '#DDA0DD', pants: '#EE82EE', eye: '#3A3630' },
   sgn_coco:  { body: '#90EE90', helmet: '#228B22', clothing: '#98FB98', pants: '#F0FFF0', eye: '#3A3630' },
   sgn_lulu:  { body: '#87CEEB', helmet: '#4682B4', clothing: '#B0E0E6', pants: '#E0FFFF', eye: '#3A3630' },
   sgn_peach: { body: '#FFB6C1', helmet: '#FF69B4', clothing: '#FFC0CB', pants: '#FFE4E1', eye: '#3A3630' },
   sgn_ruby:  { body: '#FF6347', helmet: '#DC143C', clothing: '#FF4500', pants: '#FF7F50', eye: '#3A3630' },
 };
 const CHARACTER_EMOJI = {
-  sgn_haru: '🍞', sgn_mina: '🌙', sgn_coco: '🌿', sgn_lulu: '🎨', sgn_peach: '🎵', sgn_ruby: '👩‍🍳',
+  sgn_haru: '💻', sgn_minu: '📚', sgn_lulu: '☕', sgn_peach: '📋', sgn_coco: '✏️', sgn_ruby: '🎓',
 };
 
 // ── 배경: SPUM 맵을 한 번 구워서 #bg 에 깐다 ────────────────
@@ -278,7 +282,7 @@ function syncSPUM() {
 let spumMap = null, spumObstacle = null, spumWalk = null, spumWalkSig = '';
 let world = [], round = null, cur = null, talks = 0, budget = 18;
 const chat = {}, board = {}, topic = {}, discovered = {};
-// SPUM Cast 의 인격(성격·MBTI·말투·내력). NPC 만 갖는다 —
+// SPUM Cast 의 인격(성격·경향·말투·내력·관계). NPC 만 갖는다 —
 // 플레이어가 고른 캐릭터의 인격은 아래 boot() 에서 통째로 지운다.
 const castPersona = {}, castPersonaAll = {};
 // NPC 마다 하나씩. 판이 새로 시작될 때만 갈아 끼운다.
@@ -289,8 +293,10 @@ let llmReady = false;
 let currentHourIndex = 0, hourTimer = 0;
 const HOUR_INTERVAL = 2700;
 const ROOM_POS = {}; ZONES.forEach(z => { ROOM_POS[z.name] = { x: z.x, y: z.y }; });
+// 맵을 읽은 뒤 다시 채운다
+function refreshRoomPos() { for (const k of Object.keys(ROOM_POS)) delete ROOM_POS[k]; ZONES.forEach(z => { ROOM_POS[z.name] = { x: z.x, y: z.y }; }); }
 
-const TS = 32, MW = HW, MH = HH;   // 테마 타일이 32px 이다 — 1:1 로 그린다
+let TS = 32, MW = HW, MH = HH;     // 테마 타일이 32px 이다 — 1:1 로 그린다. 맵을 읽으면 맞춰 바뀐다
 // 무대는 도면 크기를 따른다 (48×48 → 1536²). 하드코딩하면 도면을 고칠 때마다 어긋난다.
 for (const id of ['#bg', '#scene', '#overlay']) {
   const c = document.querySelector(id); if (!c) continue;
@@ -306,7 +312,7 @@ for (const id of ['#bg', '#scene', '#overlay']) {
 const UNIT_SCALE = 0.07;   // 실측 ≈ 2칸 높이 · 1칸 폭
 let bubbles = {};
 
-// 플레이어는 캐스트 6종 가운데 하나다. 고양이는 없앴다.
+// 플레이어는 여섯 하우스메이트 가운데 하나다 (CHARACTER_SYSTEM.md §8). 예전의 「고양이」 자리는 없앴다.
 let PLAYER_ID = null;
 const NPCS = () => CAST.filter(c => c.id !== PLAYER_ID);
 const playerGrid = { x: 0, y: 0 };
@@ -676,7 +682,7 @@ function renderRoster() {
       avatar.append(img);
     } else avatar.textContent = CHARACTER_EMOJI[c.id] || '👤';   // SPUM 이 아직 안 구웠을 때만
     const heard = heardCount(memories[c.id]);
-    const t = el('div'); t.append(el('b', null, c.name), el('span', null, c.species + (isNear ? ' · 근처' : '')
+    const t = el('div'); t.append(el('b', null, c.name), el('span', null, c.job + (isNear ? ' · 근처' : '')
       + ' · 기억 ' + memorySize(memories[c.id]) + (heard ? ' (들은 ' + heard + ')' : '')));
     d.append(avatar, t);
     d.onclick = () => { cur = c.id; renderRoster(); renderLog(); openChat(); };
@@ -883,7 +889,7 @@ function chooseCharacter() {
       const b = document.createElement('button');
       const colors = CHARACTER_COLORS[c.id] || {};
       b.style.borderLeft = '6px solid ' + (colors.body || '#ccc');
-      b.textContent = (CHARACTER_EMOJI[c.id] || '👤') + ' ' + c.name + ' · ' + c.species;
+      b.textContent = (CHARACTER_EMOJI[c.id] || '👤') + ' ' + c.name + ' · ' + c.age + '세 ' + c.job;
       b.onclick = () => finish(c.id);
       wrap.append(b);
     });
@@ -893,13 +899,17 @@ function chooseCharacter() {
 }
 
 // 고를 때마다 인격표를 다시 만든다. 플레이어가 고른 캐릭터는 빼고 채운다 —
-// 그래야 성격·MBTI 가 SAM 프롬프트에 실릴 길 자체가 없다.
-// NPC 에게 알려 줄 「네가 누구인지」. 직업과 내력만이다 — 성격·MBTI·말투는 뺀다.
+// 그래야 성격·경향이 SAM 프롬프트에 실릴 길 자체가 없다 (CHARACTER_SYSTEM.md §8).
+// NPC 에게 알려 줄 「네가 누구인지」. 나이·직업·생활뿐이다 — 성격·경향·말투는 뺀다.
 function playerCardOf() {
   const p = castPersonaAll[PLAYER_ID];
-  const name = (CAST.find(c => c.id === PLAYER_ID) || {}).name || '';
-  if (!p) return { name };
-  return { name, occupation: p.occupation || '', background: p.background || '' };
+  const c = CAST.find(x => x.id === PLAYER_ID) || {};
+  const name = c.name || '';
+  if (!p) return { id: PLAYER_ID, name, age: c.age };
+  const pf = p.profile || {};
+  // NPC 쪽에서 관계를 찾으려면 아이디가 있어야 한다 (dialogue.relationLine).
+  return { id: PLAYER_ID, name, age: pf.age || c.age, occupation: p.occupation || '',
+    living: pf.living || '', background: p.background || '' };
 }
 
 async function pickPlayer() {
@@ -932,7 +942,7 @@ function newRound() {
   $('#myrole').innerHTML = '넌 <b>' + meName + '</b>다. 넌 안 먹었다. <b>진짜 먹은 하나</b>를 찾아라.'
     + '<br><span class="note">네 방패: "' + me.shield.line + '"</span>'
     + '<br><span class="note">식구들은 네가 ' + ((castPersonaAll[PLAYER_ID] || {}).occupation || '누구인지') + '라는 건 안다.'
-    + ' 하지만 네 성격·MBTI 는 판에서 빠진다 — 말은 네가 하고 싶은 대로 한다.</span>';
+    + ' 하지만 네 성격·경향·말투는 판에서 빠진다 — 말은 네가 하고 싶은 대로 한다.</span>';
   say(null, '아침이다. 냉장고 앞에 빈 접시만 덩그러니 놓여 있다. 어젯밤 집 안에는 여섯뿐이었다.');
 }
 
@@ -948,6 +958,26 @@ async function boot() {
   llmReady = h.sam === 'ready' || h.sam === 'bridge';
   $('#pillLLM').textContent = h.sam === 'ready' ? 'SAM · claude-sonnet-4.6' : (h.sam === 'bridge' ? 'SAM · 로그인 다리' : 'SAM 없음 · 간이모드');
   spumMap = await loadSpumMap('./');
+  // ── 맵이 정본이다 ────────────────────────────────────────
+  // 크기·시작 자리·방 이름표를 맵에서 받는다. Studio 에서 맵을 바꾸면 게임이 따라간다.
+  TS = spumMap.TS || TS; MW = spumMap.W; MH = spumMap.H;
+  for (const id of ['#bg', '#scene', '#overlay']) {
+    const c = document.querySelector(id); if (c) { c.width = MW * TS; c.height = MH * TS; }
+  }
+  { const st = document.querySelector('.stage'); if (st) st.style.width = (MW * TS) + 'px'; }
+  if (spumMap.zones?.length) { ZONES = spumMap.zones; refreshRoomPos(); }
+  roomOf = (x, y) => spumMap.roomAt(x, y) ?? roomOf0(x, y);
+  // 맵의 시작 자리가 벽 위에 찍혀 있을 수 있다 — 가장 가까운 빈 칸으로 물러난다
+  const snap = (x, y) => {
+    const free = (a, b) => a >= 0 && b >= 0 && a < MW && b < MH && !spumMap.obstacle[b * MW + a];
+    if (free(x, y)) return { x, y };
+    for (let r = 1; r <= 8; r++)
+      for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++)
+        if (Math.max(Math.abs(dx), Math.abs(dy)) === r && free(x + dx, y + dy)) return { x: x + dx, y: y + dy };
+    return { x, y };
+  };
+  for (const [id, a] of Object.entries(spumMap.actors || {}))
+    if (SPOT[id]) { const p = snap(a.x, a.y); SPOT[id] = { room: a.room || SPOT[id].room, x: p.x, y: p.y }; }
   spumObstacle = new Uint8Array(spumMap.obstacle);   // 1 = 막힘 (우리 A* 기준)
   // ⚠️ SPUM 런타임은 **정반대**다 — `setGrid` 의 기본값이 fill(1) 이고 그게 "다 걸을 수 있다"는 뜻이다.
   //    그래서 런타임에는 walkable(1 = 걸을 수 있음) 을 준다. 막힘표를 그대로 넘기면
@@ -978,6 +1008,7 @@ window.__wamc = {
   get gossip() { return gossipCount; },
   memories, npcState, playerGrid,
   get obstacle() { return spumObstacle; },
+  get mapW() { return MW; }, get mapH() { return MH; },
   get runtime() { return spumRuntime; },
   findPath, isWalkable, startPlayerMove,
   get landmarks() { return spumMap ? spumMap.landmarks : []; },

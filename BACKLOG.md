@@ -42,8 +42,8 @@
       · 소문 문장은 **SAM 이 짓는다** (`buildGossipMessages`). 사실은 memory 가 고른 한 조각으로 고정
       실측: 브라우저 40초에 소문 16건, 기억 9→21, 엿들은 줄 10건, 증언판 9/36 칸
 
-- [x] **인격을 SPUM Cast 정본으로** (08-19) — `cast.json` persona 에 `mbti`/`traits`/`occupation` 채움.
-      NPC 프롬프트는 성격·MBTI·버릇·말투·내력을 Cast 에서 읽는다.
+- [x] **인격을 SPUM Cast 정본으로** (08-19) — `cast.json` persona 에 `traits`/`occupation`/`profile` 채움.
+      NPC 프롬프트는 성격·경향·버릇·말투·내력·관계를 Cast 에서 읽는다. (08-20 CHARACTER_SYSTEM.md 판으로 교체)
       **플레이어가 고른 캐릭터는 인격에서 풀린다** — `castPersona` 에서 지워 SAM 에 실릴 길을 없앴고,
       `buildMessages`/`buildGossipMessages` 는 플레이어 id 로 부르면 예외를 던진다
 

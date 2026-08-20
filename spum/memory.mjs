@@ -111,8 +111,11 @@ export function noteAsked(round, mem, topic) {
 }
 
 // ── 말로 옮기기 ─────────────────────────────────────────────
+// 플레이어는 여섯 중 하나다. 이름은 판마다 달라지니 round 에서 꺼내 쓴다.
+export const playerName = round => (round.playerId ? nameOf(round, round.playerId) : '누군가');
+
 export function describe(round, e, speakerId = null) {
-  const who = e.who === '__player' ? '고양이' : (e.who ? nameOf(round, e.who) : '');
+  const who = e.who === '__player' ? playerName(round) : (e.who ? nameOf(round, e.who) : '');
   switch (e.k) {
     case 'own':     return `${e.hour}엔 ${e.room}에 있었다`;
     case 'lie':     return `${e.hour}엔 ${e.room}에 있었다`;
@@ -129,7 +132,7 @@ export function describe(round, e, speakerId = null) {
 // 직접 본 것과 전해 들은 것은 문장부터 다르다. 이 구분이 게임의 뼈대다.
 export function gossipLine(round, g) {
   const e = g.src || g.entry;
-  const who = e.who === '__player' ? '고양이' : (e.who ? nameOf(round, e.who) : '');
+  const who = e.who === '__player' ? playerName(round) : (e.who ? nameOf(round, e.who) : '');
   switch (e.k) {
     case 'own':
     case 'lie':     return `나 ${e.hour}엔 ${e.room}에 있었어.`;
@@ -140,7 +143,7 @@ export function gossipLine(round, g) {
                       : `${e.from[0]} 말로는, ${who}가 ${e.hour}에 ${e.room}에 있었대.`;
     case 'clue':    return (e.from.length ? `${e.from[0]} 말로는, ` : '')
                            + `${nameOf(round, e.about)} 말이야 — ${e.text}.`;
-    case 'asked':   return `고양이가 ${e.topic} 캐고 다니더라.`;
+    case 'asked':   return `${playerName(round)}가 ${e.topic} 캐고 다니더라.`;
     default:        return describe(round, e);
   }
 }
@@ -168,7 +171,7 @@ export function factLines(round, mem) {
       .map(e => `${nameOf(round, e.about)} — ${e.text} (${e.from.join('·')}한테 들음)`).join(' / '));
   }
   if (asked.length) {
-    L.push('· 집 안에 도는 이야기: 고양이가 ' + [...new Set(asked.map(e => `"${e.topic}"`))].slice(-3).join(', ')
+    L.push('· 집 안에 도는 이야기: ' + playerName(round) + '가 ' + [...new Set(asked.map(e => `"${e.topic}"`))].slice(-3).join(', ')
       + ' 를(을) 캐고 다닌다. 물어보면 그런 얘기를 들었다고 해도 된다.');
   }
   return L;

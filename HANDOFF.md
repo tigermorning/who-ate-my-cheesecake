@@ -20,21 +20,30 @@
 - **Step 3**: NPC 루틴 — 방 간 이동/스케줄, 게임 시계 (21시~02시, 45초 간격)
 - **Step 4**: NPC 상호작용 — 근접 감지(2칸), E키 대화, NPC 간 정보 공유
 
-## 캐스트 — **전면 교체됨** (6종)
-동물/헬멧 콘셉트는 **폐기**했다. 08-19 13:05~13:08 에 "제약 없음, 밝고 귀여운 6종"으로 새로 만들었다.
-정본은 `spum/cast.json`. 아래 표는 요약이고, 장비/색 값은 파일을 봐라.
+## 캐스트 — **CHARACTER_SYSTEM.md 판** (6명)
+**인물의 정본은 `CHARACTER_SYSTEM.md` 다.** 그것을 옮겨 담은 것이 `spum/cast.json` 의 `persona`
+(SPUM Cast 스키마 + `persona.profile`) 이고, 판을 돌리는 최소 정보만 `spum/round.mjs` 의 `CAST` 에 있다.
+아래 표는 요약이고, 장비/색 값은 파일을 봐라.
 
-| ID | 이름 | 성격 | 직업 | body | helmet |
+| ID | 이름 | 나이 | 직업 | body | helmet |
 |---|---|---|---|---|---|
-| sgn_haru | 하루 | 밝음·다정·덜렁 | 베이커 | legacy_body_human_1 | modernpackver1_hoodie |
-| sgn_mina | 미나 | 조용·사려깊음 | 시인 | legacy_body_human_4 | elf_helmet_17 |
-| sgn_coco | 코코 | 장난·활발 | 정원사 | legacy_body_human_2 | legacy_helmet_1 |
-| sgn_lulu | 루루 | 나른·몽상 | 화가 | legacy_body_elf_1 | elf_helmet_06 |
-| sgn_peach | 피치 | 명랑·음악 | 음악가 | legacy_body_human_3 | elf_helmet_12 |
-| sgn_ruby | 루비 | 도도·정확 | 요리사 | legacy_body_human_1 | elf_helmet_12 |
+| sgn_haru | 하루 | 34 | 소프트웨어 개발자 | legacy_body_human_1 | modernpackver1_hoodie |
+| sgn_minu | 미누 | 42 | 초등학교 교사 | legacy_body_human_4 | elf_helmet_17 |
+| sgn_lulu | 루루 | 27 | 카페 매니저 | legacy_body_elf_1 | elf_helmet_06 |
+| sgn_peach | 피치 | 51 | 보험사 직원 | legacy_body_human_3 | elf_helmet_12 |
+| sgn_coco | 코코 | 31 | 프리랜스 디자이너 | legacy_body_human_2 | legacy_helmet_1 |
+| sgn_ruby | 루비 | 23 | 대학원생 | legacy_body_human_1 | elf_helmet_12 |
 
-⚠️ 옛 캐스트(사슴/적토마/펭귄/토끼/밤톨이/황소)는 죽었다. 그 이름의 스프라이트 시트
-(`spum/sprites/*-idle-sheet.*`) 10개는 삭제됐고, 그래서 예전 play.html 이 404 를 냈다.
+각 캐릭터가 드는 것: 나이·직업·생활 형태·생활 루틴·과거 1~2줄·성격 경향·관심사·동기·민감한 부분,
+그리고 나머지 다섯과의 **관계 한 줄**(`persona.profile.relations`). 그 이상은 넣지 않는다 —
+CHARACTER_SYSTEM.md §15·§16 이 금지한다. 대화가 어색하면 설정을 늘리는 대신
+문맥·화행·관계·감정·기억을 손본다.
+
+⚠️ 폐기된 캐스트 두 세대:
+- 동물판(호랑이 카일·토끼 미라·원숭이 도른·돼지 하웰·오리 벤 + 고양이 플레이어) — `premise.json` 에 남아 있던 것을 걷어냈다.
+- 동화판(베이커·시인·정원사·화가·음악가·요리사, `sgn_mina` 라는 오타 아이디 포함) — `cast.json`·`round.mjs`·`dialogue.mjs` 에서 걷어냈다.
+그 시절 스프라이트 시트(`spum/sprites/*-idle-sheet.*`)는 이미 삭제됐다. 아이디 여섯(`sgn_*`)과
+장비/색은 그대로 살아 있으므로 SPUM Studio 쪽 캐릭터는 다시 만들지 않아도 된다.
 
 ## SPUM 엔진 조사
 - **SPUM 은 웹엔진** (공식: "SPUM 웹엔진"). 에셋 팩이 아니다.

@@ -198,9 +198,11 @@ export const ONWALL = [
   { key: 'painting', x: 22, y: 2 }, { key: 'painting', x: 5, y: 14 },
 ];
 
+// 첫 자리일 뿐이다. 판이 시작되면 `newRound()` 가 그 판의 동선 첫 칸으로 다시 앉힌다.
+// 방과 인물 사이에 뜻은 없다 — 옛 캐스트(베이커=부엌 …)의 흔적이지 설정이 아니다.
 export const SPOT = {
   sgn_haru:  { room: '부엌', x: 8, y: 6 },
-  sgn_mina:  { room: '서재', x: 25, y: 20 },
+  sgn_minu:  { room: '서재', x: 25, y: 20 },
   sgn_coco:  { room: '텃밭', x: 30, y: 21 },
   sgn_lulu:  { room: '거실', x: 22, y: 15 },
   sgn_peach: { room: '데크', x: 3, y: 12 },

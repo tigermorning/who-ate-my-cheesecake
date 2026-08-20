@@ -4,13 +4,15 @@
 // 어젯밤 사람이 있을 수 있던 자리. 집 도면(house.mjs)의 방 이름과 글자 하나까지 같아야 한다.
 export const ROOMS = ['부엌', '식당', '거실', '서재', '데크', '운동장', '텃밭', '헛간'];
 export const HOURS = ['21시', '22시', '23시', '00시', '01시', '02시'];
+// 여섯 하우스메이트. 정본은 CHARACTER_SYSTEM.md 이고, 인격의 정본은 cast.json 의 persona 다.
+// 여기에는 판을 돌리는 데 필요한 최소한(아이디·이름·직업)만 둔다.
 export const CAST = [
-  { id: 'sgn_haru',  name: '하루',  species: '베이커' },
-  { id: 'sgn_mina',  name: '미나',  species: '시인' },
-  { id: 'sgn_coco',  name: '코코',  species: '정원사' },
-  { id: 'sgn_lulu',  name: '루루',  species: '화가' },
-  { id: 'sgn_peach', name: '피치',  species: '음악가' },
-  { id: 'sgn_ruby',  name: '루비',  species: '요리사' },
+  { id: 'sgn_haru',  name: '하루',  job: '소프트웨어 개발자', age: 34 },
+  { id: 'sgn_minu',  name: '미누',  job: '초등학교 교사',     age: 42 },
+  { id: 'sgn_lulu',  name: '루루',  job: '카페 매니저',       age: 27 },
+  { id: 'sgn_peach', name: '피치',  job: '보험사 직원',       age: 51 },
+  { id: 'sgn_coco',  name: '코코',  job: '프리랜스 디자이너', age: 31 },
+  { id: 'sgn_ruby',  name: '루비',  job: '대학원생',          age: 23 },
 ];
 
 export const SHIELDS = [

@@ -8,90 +8,71 @@ import { factLines, heardPairs, heardNames } from './memory.mjs';
 export const MODEL = { fast: 'claude-haiku-4-5', normal: 'claude-sonnet-4.6', best: 'claude-opus-4.8' };
 
 // ── 성격 카드 ──────────────────────────────────────────────
-// 성격·MBTI·말투·내력의 정본은 **SPUM Cast** (`cast.json` 의 persona) 다.
-// 아래 표는 말투 예문(few-shot)만 들고 있다 — Cast 스키마에 없는 값이라 여기 남긴다.
+// 성격·말투·내력·관계의 정본은 **CHARACTER_SYSTEM.md** 이고, 그것을 옮겨 담은 것이
+// **SPUM Cast** (`cast.json` 의 persona) 다. 아래 표는 Cast 스키마에 없는 두 가지만 든다:
+//   · tendency — 말수 (응답 길이 가이드로 쓴다)
+//   · shots    — 말투 예문 (few-shot)
+// ⚠️ 예문에 사건 정보(시각·장소·목격)나 개인사를 넣지 않는다. CHARACTER_SYSTEM.md §13 —
+//    예문은 말투의 결만 보여야 하고, 대사 창고가 되어서는 안 된다.
 export const VOICE = {
   sgn_haru: {
-    tone: '밝고 다정한 존댓말. 느낌표가 많다. 긍정적 표현을 즐긴다.',
-    tendency: 'talkative',  // 말이 많다. 이야기를 잘 이어간다.
+    tone: '결론부터 말한다. 확실하지 않은 것은 확실하지 않다고 한다. 편한 상대에게는 농담을 섞는다.',
+    tendency: 'moderate',
     shots: [
-      '저요?! 저는 부엌에서 빵 구우고 있었어요!',
-      '새로운 빵 레시피를 시도 중이었거든요~',
-      '다들 맛있는 냄새가 나서 부엌으로 온 거 아니에요?',
-      '어젯밤에 특별히 좋은 냄새가 났거든요~ 혹시 다들 느끼셨어요?',
-      '빵 굽는 건 정말 좋아요~ 과정이 즐거워서요!',
-      '아, 그 시간대에는 부엌에 혼자 있었어요~ 레시피 정리하고 있었지~',
-      '다들 너무 의심하지 마요~ 저는 빵만 구웠어요!',
-      '치즈케이크는… 아 저도 먹고 싶긴 한데요~',
+      '그건 확실하지 않은데. 확인해 보고 말할게.',
+      '아 그럼 순서를 좀 정리해 보자. 뭐부터 걸리는데?',
+      '되게 그럴듯하게 말하네. 근거는?',
+      '나 그렇게 한가한 사람 아니야. 일 끝나면 뻗어.',
     ],
   },
-  sgn_mina: {
-    tone: '짧고 정중한 말투. 감정을 잘 드러내지 않는다. 한 번에 한 가지만 말한다.',
-    tendency: 'reserved',  // 과묵. 짧게 대답하고 말을 아낀다.
+  sgn_minu: {
+    tone: '판단을 서두르지 않는다. 되묻고 정리해서 말한다. 중요한 문제에서는 분명하게 말한다.',
+    tendency: 'reserved',
     shots: [
-      '서재에 있었다. 시를 쓰고.',
-      '그 시각, 아무도 없었다.',
-      '관찰한 것만 말하겠다.',
-      '아무도 안 보였다. 조용했다.',
-      '그 시간 기억한다. 서재에 혼자 있었다.',
-      '남의 일에는 관심 없다. 내 할 일만 했다.',
-      '시는 혼자 쓰는 거다.',
-      '목격한 건 없다. 보지 않았으면 모른다고 했다.',
-    ],
-  },
-  sgn_coco: {
-    tone: '반말에 가까운 편한 말투. 말이 빠르다. 호기심이 많다.',
-    tendency: 'talkative',  // 말이 많다. 호기심이 많아 질문도 많이 한다.
-    shots: [
-      '나 텃밭에 있었거든! 토마토 봤어!',
-      '아 근데 부엌 쪽에서 냄새 났는데?',
-      '누가 밤에 돌아다니는 거 봤어!',
-      '야 너 그 시간에 어디 있었어? 진짜?',
-      '텃밭이 제일 좋아~ 밤에도 가끔 나가거든~',
-      '아 그건 아닌데~ 나는 그냥 텃밭이었어~',
-      '음 의심 가득한 눈으로 보지 마~ 나는 텃밭 하나뿐이야!',
-      '동트기 전에 일어나서 텃밭 봤거든~ 새도 봤어!',
+      '잠깐. 그 말부터 다시 들어 보자.',
+      '지금 서로 다른 이야기를 하고 있는 것 같은데.',
+      '내가 본 것만 말하겠다.',
+      '그런 식으로 몰아붙이는 건 좋지 않다.',
     ],
   },
   sgn_lulu: {
-    tone: '말이 느리고 흐릿하다. 확신이 없는 말투. 하품이 섞인다.',
-    tendency: 'reserved',  // 과묵. 생각이 느리고 말이 적다.
+    tone: '말이 빠르고 가볍다. 농담을 자주 던진다. 상대가 정말 힘들어 보이면 톤이 바뀐다.',
+    tendency: 'talkative',
     shots: [
-      '아 뭐… 거실 난로 앞이었나…',
-      '그때 좀 졸았는지도…',
-      '꿈을 꾸고 있었는지, 아니었는지…',
-      '어… 거실? 난로 앞에서 잠깐… 뭐 있었던 것 같은…',
-      '하암… 밤에는 잠깐 잠들었어… 꿈은 기억 안 나…',
-      '아 뭐иль까… 그 시간에는 그냥… 가만히 있었어…',
-      '글쎄… 기억이 좀 흐릿해… 미안…',
+      '아 뭐야 그게~ 웃기잖아.',
+      '나? 나야 뭐 늘 그렇지. 그쪽은?',
+      '농담이야 농담. 근데 진짜로는 어떻게 된 건데?',
+      '야, 그건 좀 아니지. 나 그렇게 대충 사는 사람 아니야.',
     ],
   },
   sgn_peach: {
-    tone: '활기찬 말투. 리듬감 있게 말한다. 느낌표가 많다.',
-    tendency: 'talkative',  // 말이 많다. 음악처럼 리듬감 있게 말한다.
+    tone: '자기 생각을 설명하듯 말한다. 낯선 주장은 바로 받아들이지 않는다. 납득하면 인정한다.',
+    tendency: 'talkative',
     shots: [
-      '데크에서 기타 치고 있었어요~♪',
-      '밤바람이 너무 좋아서 오래 있었죠!',
-      '누군가의 발소리를 들은 것 같기도?',
-      '음악이 밤바람이랑 너무 잘 어울려서~ 오래 있었어요♪',
-      '데크에서 기타 치는데~ 누가 지나가는 거 같더라고요~',
-      '밤하늘이 너무 예뻐서요~ 혼자 음악 들으며 있었어요!',
-      '아~ 그 시간에는 데크에서 기타 연습 중이었어요~',
-      '밤에 데크에 갔는데~ 진짜 아무도 없었어요!',
+      '내가 겪어 보니까 그런 건 대개 이유가 있더라고.',
+      '글쎄, 그렇게 간단한 이야기는 아닐 텐데.',
+      '그래, 그건 자네 말이 맞겠네. 내가 잘못 봤어.',
+      '나이 얘기는 빼고 말하자고.',
+    ],
+  },
+  sgn_coco: {
+    tone: '단정하기 전에 되묻는다. 전제를 짚는다. 지시받는 말투에는 반응이 날카로워진다.',
+    tendency: 'moderate',
+    shots: [
+      '그건 왜 그렇게 생각해?',
+      '애초에 그 전제가 맞나? 나는 좀 아닌 것 같은데.',
+      '음, 여러 가지일 수 있잖아. 하나로 정하지 말자.',
+      '그건 내가 알아서 할게.',
     ],
   },
   sgn_ruby: {
-    tone: '도도한 존댓말. 정확하게 말한다. 틀리면 바로 짚어준다.',
-    tendency: 'moderate',  // 적당히 말한다. 필요한 것만 정확하게.
+    tone: '질문이 많고 솔직하다. 최근에 배운 것은 조금 과하게 자신 있게 말할 때가 있다.',
+    tendency: 'talkative',
     shots: [
-      '저는 식당에서 재료를 정리하고 있었습니다.',
-      '정확히 22시부터 식당이었어요.',
-      '레시피 확인은 제일 중요한 일이니까요.',
-      '정확히 기억합니다. 식당에서 재료 정리 중이었어요.',
-      '레시피를 검토하고 있었어요. 시간은 정확히 22시부터요.',
-      '재료 관리는 매일 하는 일이에요. 어젯밤에도 마찬가지였습니다.',
-      '식당에서 빠져나온 적 없어요. 확인해 보셔도 됩니다.',
-      '정확하지 않은 정보는 받아들일 수 없습니다.',
+      '어 그거 왜 그런 거예요? 진짜 궁금해서요.',
+      '제가 아는 걸로는 그게 좀 다른데요.',
+      '그런 얘기 더 듣고 싶어요.',
+      '제 말도 한 번은 들어 주셨으면 해요.',
     ],
   },
 };
@@ -109,7 +90,7 @@ export function classifyIntent(text) {
   const hourMatch = t.match(/(\d{1,2})시/);
   const hour = hourMatch ? (Number(hourMatch[1]) < 10 ? Number(hourMatch[1]) + 24 : Number(hourMatch[1])) : null;
   const room = ROOMS.find(r => t.includes(r)) || null;
-  const personNames = ['하루', '미나', '코코', '루루', '피치', '루비'];
+  const personNames = ['하루', '미누', '코코', '루루', '피치', '루비'];
   const person = personNames.find(n => t.includes(n)) || null;
   const you = /너|자기|네가|니가|당신/.test(t);
 
@@ -186,27 +167,50 @@ export function factSheet(round, id, intent = null, mem = null) {
 
 // ── 프롬프트 조립 ────────────────────────────────────────────
 // SPUM Cast persona → 프롬프트 줄. 플레이어에게는 절대 쓰지 않는다.
+// CHARACTER_SYSTEM.md §5 의 최소 정보 모형을 그대로 옮긴다.
+// 늘리지 않는다 — 대화가 어색하면 설정을 보태는 대신 문맥·화행·관계·감정을 손본다 (§15).
 export function personaLines(persona, fallbackTone = '') {
   if (!persona) return fallbackTone ? ['말투: ' + fallbackTone] : [];
   const L = [];
+  const pf = persona.profile || {};
+  const head = [pf.age ? pf.age + '세' : '', persona.occupation || '', pf.living || ''].filter(Boolean);
+  if (head.length) L.push('기본: ' + head.join(' · '));
   const p = [].concat(persona.personality || []).filter(Boolean);
   if (p.length) L.push('성격: ' + p.join(' · '));
-  if (persona.mbti) L.push('MBTI: ' + persona.mbti + ' — 이 유형이 할 법한 반응을 고른다');
+  const tend = [].concat(pf.tendencies || []).filter(Boolean);
+  // 경향이지 규칙이 아니다 — 반응을 고정하지 말고 고를 확률만 기울인다 (§5.4).
+  if (tend.length) L.push('경향 (규칙이 아니라 기울기다): ' + tend.join(' / '));
   const tr = [].concat(persona.traits || []).filter(Boolean);
   if (tr.length) L.push('버릇: ' + tr.join(', '));
   L.push('말투: ' + (persona.speechStyle || fallbackTone));
-  if (persona.background) L.push('내력: ' + persona.background);
+  if (pf.routine) L.push('평소 생활: ' + pf.routine);
+  const past = [].concat(pf.past || []).filter(Boolean);
+  if (past.length) L.push('내력 (이게 전부다. 더 지어내지 않는다): ' + past.join(' / '));
+  else if (persona.background) L.push('내력 (이게 전부다. 더 지어내지 않는다): ' + persona.background);
+  const it = [].concat(pf.interests || []).filter(Boolean);
+  if (it.length) L.push('관심사 (대화가 그리 흐르면 편하게 받는다): ' + it.join(', '));
+  if (pf.motivation) L.push('바라는 것: ' + pf.motivation);
+  if (pf.sensitivity) L.push('건드리면 반응하는 것: ' + pf.sensitivity);
   return L;
 }
 
-// 플레이어 쪽은 「누구인가」만 넘긴다 — 직업과 내력까지.
-// 성격 목록·MBTI·말투는 넘기지 않는다. 말은 사람이 직접 치는 것이고 채점 대상이 아니다.
+// 관계는 「공동 과거」가 아니라 지금의 성향 한 줄이다 (§7).
+export function relationLine(persona, otherId, otherName) {
+  const rel = persona?.profile?.relations?.[otherId];
+  if (!rel || !otherName) return null;
+  return `[${otherName}와(과)의 관계] ${rel} — 같은 말도 이 관계에 따라 다르게 받는다.`;
+}
+
+// 플레이어 쪽은 「누구인가」만 넘긴다 — 나이·직업·생활까지.
+// 성격 목록·경향·말투는 넘기지 않는다. 말은 사람이 직접 치는 것이고 채점 대상이 아니다 (§8).
 export function playerCardLines(card) {
   if (!card) return [];
-  const L = [`[말을 거는 사람] ${card.name}${card.occupation ? ' — ' + card.occupation : ''}. 같이 사는 하우스메이트다.`];
+  const head = [card.age ? card.age + '세' : '', card.occupation || ''].filter(Boolean).join(' · ');
+  const L = [`[말을 거는 사람] ${card.name}${head ? ' — ' + head : ''}. 같이 사는 하우스메이트다.`];
+  if (card.living) L.push('· ' + card.living);
   if (card.background) L.push('· ' + card.background);
   L.push('· 이 사람이 어젯밤 어디 있었는지는 네가 본 만큼만 안다. 본 적 없으면 모른다.');
-  L.push('· 이 사람의 직업과 사정을 알고 있으니 그에 맞게 받아라. 말투까지 넘겨짚지는 마라.');
+  L.push('· 이 사람의 나이와 직업, 사는 모양은 알고 있으니 그에 맞게 받아라. 말투까지 넘겨짚지는 마라.');
   return L;
 }
 
@@ -238,7 +242,7 @@ export function buildMessages({ round, id, world, history = [], userText, mood =
   const sys = [
     world.join('\n'),
     '',
-    `[너의 배역] ${nameOf(round, id)} — ${persona?.occupation || (round.cast.find(c => c.id === id) || {}).species} (SPUM Cast)`,
+    `[너의 배역] ${nameOf(round, id)} — ${persona?.occupation || (round.cast.find(c => c.id === id) || {}).job} (SPUM Cast)`,
     ...personaLines(persona, v.tone),
     '말투 예문 (그대로 베끼지 말고 결만 따른다):',
     ...v.shots.map(s => '  · ' + s),
@@ -246,6 +250,7 @@ export function buildMessages({ round, id, world, history = [], userText, mood =
     factSheet(round, id, intent, mem),
     '',
     ...playerCardLines(playerCard),
+    relationLine(persona, playerCard?.id, playerCard?.name) || '',
     '',
     contextSummary,
     '',
@@ -254,7 +259,7 @@ export function buildMessages({ round, id, world, history = [], userText, mood =
     '· 응답 길이: ' + responseGuide,
     '· 시각과 장소를 한 번에 세 칸 이상 늘어놓지 않는다.',
     '· 묻지 않은 사건 정보는 먼저 흘리지 않는다. 다만 대화 자체는 열려 있다 —',
-    '  날씨든 빵이든 상대 이야기든, 물어오면 네 성격대로 편하게 받고 되물어도 된다.',
+    '  날씨든 일 이야기든 상대 이야기든, 물어오면 네 성격대로 편하게 받고 되물어도 된다.',
     '· 정해진 문장 틀에 맞추지 마라. 매번 다르게 말한다.',
     '· 상대는 심문관이 아니라 같이 사는 식구다. 편하게 대한다.',
     '· 남에게 전해 들은 이야기는 출처를 밝히고 말한다. 네가 직접 본 것처럼 말하지 않는다.',
@@ -296,7 +301,7 @@ export function violations(round, id, text, mem = null) {
 }
 
 // ── 질문의 주제 한 마디 ─────────────────────────────────────
-// NPC 가 "고양이가 무엇을 캐고 다니는지" 를 기억하고 서로 옮기는 데 쓴다.
+// NPC 가 "플레이어가 무엇을 캐고 다니는지" 를 기억하고 서로 옮기는 데 쓴다.
 export function topicOf(intent, text = '') {
   if (!intent) return null;
   const bits = [];
@@ -332,6 +337,7 @@ export function buildGossipMessages({ round, speakerId, listenerId, persona, fac
   const sys = [
     `[너의 배역] ${nameOf(round, speakerId)} — ${persona?.occupation || ''} (SPUM Cast)`,
     ...personaLines(persona, v.tone),
+    relationLine(persona, listenerId, nameOf(round, listenerId)) || '',
     '',
     `[상황] 집 안에서 ${nameOf(round, listenerId)}와(과) 마주쳤다. 아래 사실 하나를 자연스럽게 건넨다.`,
     `[전할 사실] ${fact}`,
