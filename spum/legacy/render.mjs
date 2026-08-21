@@ -3,7 +3,7 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { surface } from './png.mjs';
+import { surface } from '../png.mjs';
 import { W, H, PROPS, ONWALL, PATCH, RUGS, ZONES, SPOT,
          at, floorOf, isWall, isFence, isDoor, sizeOf, PASSABLE } from './house.mjs';
 

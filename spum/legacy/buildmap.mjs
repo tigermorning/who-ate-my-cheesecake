@@ -78,10 +78,10 @@ Object.keys(ROOM_COLOR).forEach(name => {
 const spawnPoints = [
   ...ZONES.map(z => ({ id: 'label_' + z.name, name: z.name, x: z.x, y: z.y, tags: ['room', 'label'] })),
   ...Object.entries(SPOT).map(([id, s]) => ({ id: 'start_' + id, name: id, x: s.x, y: s.y, tags: ['actor', s.room] })),
-  ...LANDMARKS.map(L => ({ id: 'spot_' + L.name, name: L.name, x: L.x, y: L.y, tags: ['landmark'] })),
+  ...LANDMARKS.map(L => ({ id: 'spot_' + L.name, name: L.name, x: L.x, y: L.y, description: L.desc || '', tags: ['landmark'] })),
 ];
 
-console.log(JSON.stringify({
+const mapJson = JSON.stringify({
   id: 'MAP_cheesecake_house', name: THEME_NAME,
   description: '단층집 한 채와 뜰. 부엌·식당·욕실·거실·서재가 복도 하나로 이어지고, 뜰에 데크·운동장·텃밭·헛간이 있다.',
   version: 3, width: W, height: H, tileSize: theme.tileSize,
@@ -106,4 +106,9 @@ console.log(JSON.stringify({
   spawnPoints,
   meta: { createdAt: now, updatedAt: now, tags: ['치즈케이크'],
           themeSheet: 'house-theme.png', themeTiles: theme.count },
-}));
+});
+
+const targetFile = process.argv[2] || join(__dirname, 'house-map.json');
+const { writeFileSync } = await import('node:fs');
+writeFileSync(targetFile, mapJson, 'utf8');
+console.log('spum/house-map.json 작성 완료 (' + (W + 'x' + H) + ')');

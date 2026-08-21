@@ -3,8 +3,8 @@
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { decodePNG } from './png.mjs';
-import { SHEETS, MAT, RUG9, OBJ } from './materials.mjs';
+import { decodePNG } from '../png.mjs';
+import { SHEETS, MAT, RUG9, OBJ } from '../materials.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CELL = 16;                                   // SPUM 타일 원본 한 칸

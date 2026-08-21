@@ -1,5 +1,5 @@
 // 집 도면을 글자로 찍고, 도면이 성립하는지 확인한다.  node spum/houseplan.mjs
-import { OBJ, RUG9 } from './materials.mjs';
+import { OBJ, RUG9 } from '../materials.mjs';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';

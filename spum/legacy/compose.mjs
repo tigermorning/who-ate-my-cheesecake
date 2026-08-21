@@ -1,10 +1,10 @@
 // 도면을 한 장의 그림으로 합친다. render.mjs 와 buildtheme.mjs 가 같이 쓴다.
 // 화소는 전부 SPUM 유니티 타일셋에서 온다 — spum/materials.mjs 참고.
-import { surface } from './png.mjs';
+import { surface } from '../png.mjs';
 import { drawMat, drawObj, drawRug } from './spumart.mjs';
 import { W, H, PROPS, ONWALL, PATCH, RUGS,
          floorOf, isWall, isFence, isDoor, isRoad, sizeOf, PASSABLE, OVERHEAD, at } from './house.mjs';
-import { OBJ } from './materials.mjs';
+import { OBJ } from '../materials.mjs';
 
 export const inBox = (x, y) => ([x1, y1, x2, y2]) => x >= x1 && x <= x2 && y >= y1 && y <= y2;
 
