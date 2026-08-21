@@ -1,5 +1,11 @@
 {
-  "dependencies": {
+  "name": "who-ate-my-cheesecake",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node spum/serve.mjs"
+  },
+  "devDependencies": {
     "playwright": "^1.62.1"
   }
 }

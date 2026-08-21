@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: who-ate-my-cheesecake
+    runtime: node
+    plan: free
+    buildCommand: npm install --omit=dev
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: SAM_API_KEY
+        sync: false
+      - key: SAM_BASE_URL
+        value: https://sam.soonsoon.ai/openai/v1
+      - key: SAM_MODEL
+        value: claude-haiku-4-5

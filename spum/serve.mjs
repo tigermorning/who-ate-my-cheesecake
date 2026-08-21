@@ -106,6 +106,21 @@ const SAM_BASE = (env.SAM_BASE_URL || 'https://sam.soonsoon.ai/openai/v1').repla
 // 게임 → 이 서버(대기열) → 다리 탭(spum.soonsoon.ai) → SAM → 되돌아온다.
 const jobs = new Map();          // id → {req, resolve}
 let jobSeq = 1;
+
+// ── 공개 배포용 남용 방지 — IP당 분당 SAM 요청 수를 제한한다 ──
+const RATE_LIMIT = { windowMs: 60_000, max: 20 };
+const rateBuckets = new Map();   // ip → timestamp[]
+function clientIp(req) {
+  const fwd = req.headers['x-forwarded-for'];
+  return (fwd ? fwd.split(',')[0].trim() : req.socket.remoteAddress) || 'unknown';
+}
+function isRateLimited(ip) {
+  const now = Date.now();
+  const hits = (rateBuckets.get(ip) || []).filter(t => now - t < RATE_LIMIT.windowMs);
+  hits.push(now);
+  rateBuckets.set(ip, hits);
+  return hits.length > RATE_LIMIT.max;
+}
 const BRIDGE_JS = `(() => {
   if (window.__sgnBridge) return '이미 돌고 있다';
   window.__sgnBridge = true;
@@ -215,6 +230,10 @@ function normalizeSamBody(raw) {
     return res.end(JSON.stringify({ error: 'POST 로만 받는다', method: req.method, path: url.pathname }));
   }
   if ((url.pathname === '/api/sam/generate' || url.pathname === '/api/sam/v1/generate') && req.method === 'POST') {
+    if (isRateLimited(clientIp(req))) {
+      res.writeHead(429, { 'Content-Type': 'application/json; charset=utf-8' });
+      return res.end(JSON.stringify({ error: '요청이 너무 잦다. 1분 뒤 다시.' }));
+    }
     const raw = await readBody(req);
     console.log('[SAM] 요청:', url.pathname, String(raw).slice(0, 200));
     const body = normalizeSamBody(raw);
@@ -258,6 +277,9 @@ function normalizeSamBody(raw) {
   // ── Studio → 게임: 맵을 받아 spum/ 에 쓴다 ────────────────
   // 로그인된 Studio 탭이 타일 그림을 시트로 합쳐 여기로 보낸다.
   if (url.pathname === '/api/import' && req.method === 'POST') {
+    // 배포 환경(Render)에서는 막는다 — 로그인 없이 spum/ 파일을 쓸 수 있는 통로라
+    // 로컬 개발(Studio → 게임 반입)에서만 연다.
+    if (env.RENDER) { res.writeHead(404); return res.end(); }
     res.setHeader('Access-Control-Allow-Origin', '*');
     try {
       const body = JSON.parse(await readBody(req) || '{}');
