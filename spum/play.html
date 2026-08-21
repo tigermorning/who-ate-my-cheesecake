@@ -1450,11 +1450,69 @@ function template(id, q, sessionOpening) {
   if (/누구|봤/.test(q)) return lead + (k.seen.length ? `${k.seen[0].hour}에 ${k.seen[0].room}에서 ${nameOf(round, k.seen[0].who)}를 봤어.` : '아무도 못 봤는데.');
   return `${lead}음… 그건 잘 모르겠어.`;
 }
+// ── 무례한 말 대응 ──────────────────────────────────────────
+// 성격상 안 참는 사람(sgn_coco — 지시받는 말투에 날카로워지는 성격)은 경고 없이 곧바로 닫고,
+// 나머지는 tendency 별로 한두 번 경고한 뒤 닫는다. 닫힌 대화는 다음 시각으로 넘어가야 풀린다.
+// sgn_lulu 는 반대로 안 닫는다 — 뭘 들어도 가볍게 받아넘기는 성격(VOICE.sgn_lulu 참고).
+// 전부 안 닫으면 변별력이 없어지니, 닫는 쪽/안 닫는 쪽/중간 tendency 로 갈린다.
+const ABUSE_WORDS = ['씨발', '시발', '씹', '병신', '개새끼', '새끼', '지랄', '좆', '미친놈', '미친년',
+  '닥쳐', '꺼져', '걸레', '창녀', '바보', '멍청', '등신', '한심', 'ㅅㅂ', 'ㅂㅅ',
+  'fuck', 'shit', 'bitch', 'asshole', 'idiot', 'stupid', 'moron'];
+function isAbusive(text) {
+  const norm = text.replace(/\s+/g, '');
+  return ABUSE_WORDS.some(w => norm.includes(w));
+}
+const ABUSE_TOLERANCE_BY_TENDENCY = { reserved: 1, moderate: 2, talkative: 2 };
+const ABUSE_INSTANT_BLOCK = new Set(['sgn_coco']);
+const ABUSE_NEVER_BLOCK = new Set(['sgn_lulu']);
+function abuseTolerance(id) {
+  if (ABUSE_INSTANT_BLOCK.has(id)) return 0;
+  if (ABUSE_NEVER_BLOCK.has(id)) return Infinity;
+  const tendency = (VOICE[id] || {}).tendency || 'moderate';
+  return ABUSE_TOLERANCE_BY_TENDENCY[tendency] ?? 2;
+}
+const abuseState = {};
+const ABUSE_WARN_LINES = [
+  '말이 좀 심한 거 아니야? 그런 식으로 말하지 마.',
+  '지금 그 말투 별로다. 한 번만 더 그러면 나 얘기 안 해.',
+  '그렇게 말하면 나도 기분 안 좋아. 조심해 줬으면 해.',
+];
+const ABUSE_BLOCK_LINES = [
+  '더는 못 들어주겠다. 오늘은 너랑 말 안 섞을래.',
+  '이런 식으로 말하는 사람이랑은 얘기 안 해. 그만하자.',
+  '그런 말투로 나한테 말하지 마. 얘기 끝났어.',
+];
+const ABUSE_STILL_BLOCKED_LINES = ['아직 너랑 얘기하고 싶지 않아.', '말했잖아, 지금은 얘기 안 한다고.'];
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+function registerAbuse(id) {
+  const st = abuseState[id] || (abuseState[id] = { warnings: 0, blockedUntilHour: -1 });
+  const tol = abuseTolerance(id);
+  if (st.warnings >= tol) {
+    st.warnings = 0; st.blockedUntilHour = currentHourIndex + 1;
+    return { blocked: true, text: pick(ABUSE_BLOCK_LINES) };
+  }
+  st.warnings++;
+  return { blocked: false, text: pick(ABUSE_WARN_LINES) };
+}
+function isBlockedNow(id) {
+  const st = abuseState[id];
+  return !!st && currentHourIndex < st.blockedUntilHour;
+}
 async function send() {
   const v = $('#say').value.trim();
   if (!v || !cur || talks >= budget) return;
+  if (isBlockedNow(cur)) { $('#say').value = ''; say(cur, pick(ABUSE_STILL_BLOCKED_LINES)); return; }
   $('#say').value = ''; say('player', v);
   talks++; renderLog();
+  if (isAbusive(v)) {
+    const res = registerAbuse(cur);
+    say(cur, res.text);
+    if (res.blocked) {
+      const closingId = cur;
+      setTimeout(() => { if (chatOpen() && cur === closingId) closeChat(false); }, 1400);
+    }
+    return;
+  }
   const btn = $('#send'); btn.disabled = true; btn.textContent = '…';
   const a = await ask(cur, v);
   say(cur, a);
@@ -1631,6 +1689,7 @@ function newRound() {
   Object.keys(gossipTurn).forEach(k => delete gossipTurn[k]);
   Object.keys(gossipExchanges).forEach(k => delete gossipExchanges[k]);
   Object.keys(needsGreeting).forEach(k => delete needsGreeting[k]);
+  Object.keys(abuseState).forEach(k => delete abuseState[k]);
   chaseUsedThisRound.clear();
   gossipCount = 0; $('#pillGossip').textContent = '소문 0';
   Object.keys(discovered).forEach(k => delete discovered[k]);
