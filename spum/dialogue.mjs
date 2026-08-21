@@ -76,13 +76,54 @@ export const VOICE = {
       '제 말도 한 번은 들어 주셨으면 해요.',
     ],
   },
+  // 동네 사람 — 집 안 사정은 모르고, 오직 마주쳐서 들은 것만 안다 (round.mjs VILLAGERS).
+  vlg_hoonhoon: {
+    tone: '공손하고 든든한 말투. "~하옵니다" 체를 섞어 쓴다. 묵묵히 듣다가 할 말은 한다.',
+    tendency: 'moderate',
+    shots: [
+      '그리 되었다니, 참으로 놀랍사옵니다.',
+      '소인은 그저 지나가다 들었을 뿐이옵니다.',
+      '자세히는 모르오나, 한번 여쭤보시지요.',
+      '별일 없으시다면 다행이옵니다.',
+    ],
+  },
+  vlg_hyeonu: {
+    tone: '활발하고 논리적이다. 필요할 때만 간결하게 핵심만 말한다.',
+    tendency: 'reserved',
+    shots: [
+      '결론만 말하면, 그건 아직 모른다.',
+      '순서대로 정리해서 말해 줄래?',
+      '근거 없이 단정하진 말자.',
+      '그건 확인해 보면 금방 나올 문제야.',
+    ],
+  },
+  vlg_yoru: {
+    tone: '트렌디하고 짧고 재밌게 말한다. 반응이 빠르다.',
+    tendency: 'talkative',
+    shots: [
+      '헐 그거 완전 소재감인데?',
+      '나 지금 그거 딱 상상됨 ㅋㅋ',
+      '짧게. 결론만. 나 마감 중.',
+      '오오 더 말해봐 더.',
+    ],
+  },
+  vlg_soonsoon: {
+    tone: '차분하지만 필요하면 주도적으로 나선다. 사람 좋게 웃으며 말한다.',
+    tendency: 'moderate',
+    shots: [
+      '그거 흥미로운 이야기네요.',
+      '제 생각도 한번 말씀드려도 될까요.',
+      '차근차근 정리해보면 어떨까요.',
+      '도움이 필요하면 말씀하세요.',
+    ],
+  },
 };
 
 // 캐릭터별 대화 성향에 따른 응답 길이 가이드
 const RESPONSE_LENGTH_GUIDE = {
-  talkative: '두세 문장. 가끔 네 문장까지.',
-  moderate: '한두 문장. 필요한 때에만 세 문장.',
-  reserved: '한 문장. 꼭 필요한 말만.',
+  talkative: '한두 문장. 길어도 두 문장. 한 문장은 짧게 끊는다.',
+  moderate: '한 문장. 꼭 필요할 때만 두 문장.',
+  reserved: '한 문장. 그것도 짧게.',
 };
 
 // ── 질문 의도 분류 ──────────────────────────────────────────
@@ -215,7 +256,7 @@ export function playerCardLines(card) {
   return L;
 }
 
-export function buildMessages({ round, id, world, history = [], userText, mood = null, intent = null, mem = null, persona = null, playerCard = null }) {
+export function buildMessages({ round, id, world, history = [], userText, mood = null, intent = null, mem = null, persona = null, playerCard = null, sessionOpening = false }) {
   // 플레이어 캐릭터는 AI 가 대신 말하지 않는다 — 인격도 SAM 에 보내지 않는다.
   if (round.playerId && id === round.playerId) throw new Error('플레이어 캐릭터는 SAM 이 대신 말하지 않는다');
   const v = VOICE[id] || { tone: '', shots: [], tendency: 'moderate' };
@@ -256,8 +297,12 @@ export function buildMessages({ round, id, world, history = [], userText, mood =
     contextSummary,
     '',
     '[대답하는 법]',
+    sessionOpening && playerCard?.name
+      ? `· 이번이 이 대화의 첫 마디다. 반드시 "${playerCard.name}아/야" 식으로 상대 이름을 자연스러운 호칭(받침에 맞는 "아"나 "야")으로 불러 시작한다. 그 뒤로는 이 대화가 끝날 때까지 다시 이름을 부르지 않는다.`
+      : '· 이미 대화가 이어지는 중이다. 상대 이름을 다시 부르지 않는다.',
     '· ' + actHint,
     '· 응답 길이: ' + responseGuide,
+    '· 문장 자체도 짧게 끊는다 — 여러 명이 한꺼번에 떠드는 화면이라 긴 문장은 묻힌다.',
     '· 반드시 캐릭터의 직접 대사만 출력한다. 따옴표, 지문, 해설, 선택지 없이 말할 내용만 바로 출력한다.',
     '· 시각과 장소를 한 번에 세 칸 이상 늘어놓지 않는다.',
     '· 묻지 않은 사건 정보는 먼저 흘리지 않는다. 다만 대화 자체는 열려 있다 —',
@@ -341,7 +386,10 @@ export function topicOf(intent, text = '') {
 // ── NPC 끼리의 한마디 ───────────────────────────────────────
 // 소문은 문장까지 SAM 이 짓는다. 사실은 memory.mjs 가 고른 한 조각으로 고정된다 —
 // SAM 은 그 한 조각을 **그 캐릭터의 입으로** 옮기기만 한다.
-export function buildGossipMessages({ round, speakerId, listenerId, persona, fact, kind }) {
+// freshToListener — gossipOnce() 의 `fresh` 값을 그대로 받는다.
+//   true  : 듣는 쪽이 처음 아는 것 → "알려주는" 말투 ("그거 알아? …")
+//   false : 듣는 쪽도 이미 아는 것, 출처만 새로 늘어난 것 → "이미 도는 얘기를 나누는" 말투 ("그 얘기 너도 들었어?")
+export function buildGossipMessages({ round, speakerId, listenerId, persona, fact, kind, freshToListener = true }) {
   if (round.playerId && speakerId === round.playerId) throw new Error('플레이어는 SAM 이 대신 말하지 않는다');
   const v = VOICE[speakerId] || { tone: '', shots: [], tendency: 'moderate' };
   const heard = kind === 'place';
@@ -358,10 +406,13 @@ export function buildGossipMessages({ round, speakerId, listenerId, persona, fac
     ...personaLines(persona, v.tone),
     relationLine(persona, listenerId, nameOf(round, listenerId)) || '',
     '',
-    `[상황] 집 안에서 ${nameOf(round, listenerId)}와(과) 마주쳤다. 아래 사실 하나를 자연스럽게 건넨다.`,
+    `[상황] ${nameOf(round, listenerId)}와(과) 마주쳤다. 아래 사실 하나를 자연스럽게 건넨다.`,
     `[전할 사실] ${fact}`,
     heard ? '[주의] 이건 네가 직접 본 게 아니라 전해 들은 이야기다. 반드시 출처를 밝혀 말한다.'
           : '[주의] 이건 네가 직접 겪거나 본 것이다.',
+    freshToListener
+      ? '[주의] 상대는 이 얘기를 아직 모른다 — 처음 알려주는 것이다. "그거 알아?"처럼 새 소식을 꺼내듯 말한다.'
+      : '[주의] 상대도 이미 이 얘기를 알고 있다 — 새 소식이 아니라 이미 도는 이야기를 다시 나누는 것이다. "그 얘기 너도 들었지?"처럼 확인하듯 말한다.',
     '',
     '[쓰는 법]',
     '· ' + gossipStyle,
@@ -375,4 +426,148 @@ export function buildGossipMessages({ round, speakerId, listenerId, persona, fac
   ].join('\n');
   return [{ role: 'system', content: sys },
     { role: 'user', content: `${nameOf(round, listenerId)}에게 건넬 한마디 대사만 말해라.` }];
+}
+
+// ── 하우스메이트끼리 "범인이 누굴까" ─────────────────────────
+// 소문(buildGossipMessages)과 다르다 — 넘길 사실 한 조각이 없어도 된다.
+// 각자 아는 것(자기 자리·목격·전해 들은 것)을 근거 삼아 "짐작"을 나누는 열린 대화다.
+// 이건 게임의 정답이 아니다 — SAM 은 확정하지 않는다. 의심과 짐작만 말하게 한다 (DIALOGUE_SYSTEM.md §21).
+export function buildSuspectTalkMessages({ round, speakerId, listenerId, persona, mem }) {
+  if (round.playerId && speakerId === round.playerId) throw new Error('플레이어는 SAM 이 대신 말하지 않는다');
+  const v = VOICE[speakerId] || { tone: '', shots: [], tendency: 'moderate' };
+  const others = round.cast.filter(c => c.id !== speakerId).map(c => c.name).join(', ');
+
+  const sys = [
+    `[너의 배역] ${nameOf(round, speakerId)} — ${persona?.occupation || ''} (SPUM Cast)`,
+    ...personaLines(persona, v.tone),
+    relationLine(persona, listenerId, nameOf(round, listenerId)) || '',
+    '',
+    factSheet(round, speakerId, null, mem),
+    '',
+    `[상황] ${nameOf(round, listenerId)}와(과) 어젯밤 치즈케이크를 누가 먹었을지 잡담하듯 짐작을 나눈다.`,
+    `[용의자들] ${others}`,
+    '',
+    '[쓰는 법]',
+    '· 확정하지 않는다 — "범인은 ○○야"가 아니라 "○○ 좀 수상하지 않아?" 정도의 짐작만 말한다.',
+    '· 네가 아는 것(자기 자리·직접 본 것·전해 들은 것) 밖의 근거는 지어내지 않는다. 감이나 인상도 좋다.',
+    '· 한 문장. 길어도 두 문장.',
+    '· 반드시 캐릭터의 직접 대사만 출력한다. 큰따옴표, 지문, 부연설명 없이 대사만 출력한다.',
+    '· 네 말투 그대로. 매번 다르게 말한다.',
+    '· 상대를 지목하지 않은 채로 "모르겠다"고만 답해도 된다 — 늘 용의자를 대야 하는 건 아니다.',
+  ].join('\n');
+  return [{ role: 'system', content: sys },
+    { role: 'user', content: `${nameOf(round, listenerId)}에게 건넬 한마디 짐작만 말해라.` }];
+}
+
+// ── 대화를 끝내려는 말인지 ───────────────────────────────────
+// 플레이어의 입력이든 NPC 의 대답이든, 이 패턴에 걸리면 "이 대화는 끝내려는 참이다"로 본다.
+// 걸리면 대화창을 자동으로 닫아 서로 다른 곳으로 이동할 수 있게 한다.
+const FAREWELL_RE = /(이만\s*가|먼저\s*가|그만\s*가|나\s*이제\s*가|가야겠|가볼게|들어갈게|일\s*보러\s*가|바빠서\s*가|다음에\s*(?:다시\s*)?(?:얘기|말)\s*하자|나중에\s*(?:다시\s*)?(?:얘기|말)\s*하자|이따\s*보자|또\s*보자|잘\s*가|수고해|여기까지\s*하자|얘기는\s*여기까지|이제\s*가\s*볼게)/;
+export function isFarewell(text) { return FAREWELL_RE.test(String(text || '')); }
+
+// ── 대화가 끝났는데 아직 할 말이 남았을 때 ───────────────────────
+// 플레이어가 마무리 인사를 하고 떠나려 한다. 이 NPC 는 아직 볼일이 안 끝났다 —
+// 쫓아가서 거리를 다시 좁힌 뒤 붙잡는 한마디를 한다. MBTI/성향/관계에 따라 톤이 갈린다
+// ("그냥 가면 어떡해요?" 처럼 직설적이거나, "혹시 많이 바빠요?" 처럼 눈치를 보거나).
+export function buildChaseMessages({ round, speakerId, persona, playerCard = null, lastTopic = null }) {
+  if (round.playerId && speakerId === round.playerId) throw new Error('플레이어는 SAM 이 대신 말하지 않는다');
+  const v = VOICE[speakerId] || { tone: '', shots: [], tendency: 'moderate' };
+  const sys = [
+    `[너의 배역] ${nameOf(round, speakerId)} — ${persona?.occupation || ''} (SPUM Cast)`,
+    ...personaLines(persona, v.tone),
+    relationLine(persona, playerCard?.id, playerCard?.name) || '',
+    '',
+    `[상황] ${playerCard?.name || '상대'}가 방금 마무리 인사를 하고 자리를 뜨려 했다(혹은 이미 떴다).`,
+    '너는 아직 묻고 싶은 게 남았거나 할 말이 안 끝났다. 그래서 따라가서 다시 붙잡았다.',
+    lastTopic ? `[하던 이야기] ${lastTopic}` : '',
+    '',
+    '[쓰는 법]',
+    '· 상대를 붙잡는 한마디. 네 성격대로 — 직설적이면 서운함/황당함을 그대로 드러내고,',
+    '  조심스러운 성격이면 눈치를 보듯 묻는다. MBTI 와 관계를 반영한다.',
+    '· 한 문장. 길어도 두 문장.',
+    '· 반드시 캐릭터의 직접 대사만 출력한다. 큰따옴표, 지문, 부연설명 없이.',
+    '· 사건 정보를 새로 지어내지 않는다 — 그저 "얘기 더 하자"는 취지의 말이다.',
+    '· 매번 다르게 말한다.',
+  ].filter(Boolean).join('\n');
+  return [{ role: 'system', content: sys },
+    { role: 'user', content: '떠나려는 상대를 붙잡는 한마디만 말해라.' }];
+}
+
+// ── 개장 장면 — 슈퍼마켓에서 도는 소문 ───────────────────────────
+// 게임은 슈퍼마켓에서 시작한다. 사건은 어젯밤 하우스메이트들의 집에서 벌어졌다 —
+// 동네 사람들은 정확한 사실은 모르고 "그런 일이 있었다며?" 정도의 뜬소문만 안다.
+// role: 'raise' — 먼저 소문을 꺼낸다 / 'react' — 그 소문을 받아 되묻거나 맞장구친다.
+// 시각·장소 같은 확정 사실은 절대 담지 않는다 — round.mjs 가 승인한 적 없는 내용이다.
+export function buildIncidentGossipMessages({ round, speakerId, listenerId, persona, role = 'raise' }) {
+  if (round.playerId && speakerId === round.playerId) throw new Error('플레이어는 SAM 이 대신 말하지 않는다');
+  const v = VOICE[speakerId] || { tone: '', shots: [], tendency: 'moderate' };
+  const sys = [
+    `[너의 배역] ${nameOf(round, speakerId)} — ${persona?.occupation || ''} (SPUM Cast)`,
+    ...personaLines(persona, v.tone),
+    relationLine(persona, listenerId, nameOf(round, listenerId)) || '',
+    '',
+    `[상황] 슈퍼마켓에서 ${nameOf(round, listenerId)}와(과) 마주쳤다.`,
+    role === 'raise'
+      ? '동네에 어젯밤 하우스메이트들 집에서 뭔가 일이 있었다는 소문이 돈다. 정확히는 모른다 — 그저 그런 일이 있었다는 것만 들었다.'
+        + ' 그 소문을 먼저 꺼낸다 ("그런 일이 있었다며?" 같은 취지).'
+      : '방금 상대가 "어젯밤 하우스메이트들 집에서 무슨 일이 있었다더라"는 소문을 꺼냈다. 너도 그 얘기를 들어서 아는 척 맞장구치거나, 더 캐묻는다.',
+    '',
+    '[쓰는 법]',
+    '· 정확한 사실(누가·몇 시·어느 방)은 절대 지어내지 않는다 — 너는 그날 밤 그 집에 없었다.',
+    '  "무슨 사고가 있었다더라" 수준의 뜬소문으로만 말한다.',
+    '· 한 문장. 길어도 두 문장.',
+    '· 반드시 캐릭터의 직접 대사만 출력한다. 큰따옴표, 지문, 부연설명 없이.',
+    '· 네 말투 그대로. 매번 다르게 말한다.',
+  ].join('\n');
+  return [{ role: 'system', content: sys },
+    { role: 'user', content: role === 'raise' ? '소문을 먼저 꺼내는 한마디만 말해라.' : '소문에 반응하는 한마디만 말해라.' }];
+}
+
+// 하우스메이트가 슈퍼마켓에서 동네 사람에게 "어젯밤 우리 집에서" 있었던 일을
+// 직접 들려주는 장면. 사건의 큰 줄기(치즈케이크가 없어졌다, 누가 그랬는지는 아직 모른다)만
+// 이야기한다 — 시각·방 같은 세부 사실은 round.mjs 가 승인한 것만 대야 하니 여기서는 다루지 않는다.
+export function buildRecountMessages({ round, speakerId, listenerId, persona }) {
+  if (round.playerId && speakerId === round.playerId) throw new Error('플레이어는 SAM 이 대신 말하지 않는다');
+  const v = VOICE[speakerId] || { tone: '', shots: [], tendency: 'moderate' };
+  const isCulprit = round.culprit === speakerId;
+  const sys = [
+    `[너의 배역] ${nameOf(round, speakerId)} — ${persona?.occupation || ''} (SPUM Cast)`,
+    ...personaLines(persona, v.tone),
+    relationLine(persona, listenerId, nameOf(round, listenerId)) || '',
+    '',
+    `[상황] 슈퍼마켓에서 ${nameOf(round, listenerId)}와(과) 마주쳤다. 어젯밤 네 집(하우스메이트들과 같이 사는 집)에서`,
+    '냉장고에 넣어 둔 치즈케이크가 없어진 걸 오늘 아침에 발견했다. 누가 먹었는지는 아직 아무도 모른다.',
+    '그 이야기를 먼저 꺼내 들려준다 ("아니 어제 우리 집에서 말이죠," 같은 취지로 시작해도 좋다).',
+    isCulprit ? '· 너는 사실 그걸 먹은 당사자지만, 지금은 그 사실을 숨기고 다른 사람들처럼 궁금해하는 척 말한다.' : '',
+    '',
+    '[쓰는 법]',
+    '· 시각·방 같은 세부 사실은 지금 이야기에 넣지 않는다 — "누가·몇 시에·어디서" 는 아직 조사 중이라는 정도로만 말한다.',
+    '· 한두 문장. 길어도 두 문장.',
+    '· 반드시 캐릭터의 직접 대사만 출력한다. 큰따옴표, 지문, 부연설명 없이.',
+    '· 네 말투 그대로.',
+  ].filter(Boolean).join('\n');
+  return [{ role: 'system', content: sys },
+    { role: 'user', content: `${nameOf(round, listenerId)}에게 어젯밤 있었던 일을 들려주는 한마디만 말해라.` }];
+}
+
+// ── 플레이어가 다가왔을 때 NPC 의 즉흥 반응 ─────────────────────
+// 대화(send())를 걸기 전, 그냥 옆에 붙기만 해도 나오는 짧은 한마디다.
+// 대화 예산(talks)을 쓰지 않는다 — 말풍선으로만 뜬다.
+export function buildGreetingMessages({ round, speakerId, persona }) {
+  if (round.playerId && speakerId === round.playerId) throw new Error('플레이어는 SAM 이 대신 말하지 않는다');
+  const v = VOICE[speakerId] || { tone: '', shots: [], tendency: 'moderate' };
+  const sys = [
+    `[너의 배역] ${nameOf(round, speakerId)} — ${persona?.occupation || ''} (SPUM Cast)`,
+    ...personaLines(persona, v.tone),
+    '',
+    '[상황] 플레이어가 방금 네 옆으로 다가왔다. 아직 말을 걸지는 않았다.',
+    '',
+    '[쓰는 법]',
+    '· 짧은 인사나 반응 한마디. "어, 왔어?" 정도의 가벼운 톤.',
+    '· 사건 정보를 지어내거나 캐묻지 않는다 — 그냥 마주친 반응이다.',
+    '· 반드시 캐릭터의 직접 대사만 출력한다. 큰따옴표, 지문, 부연설명 없이.',
+    '· 한 문장. 네 말투 그대로. 매번 다르게 말한다.',
+  ].join('\n');
+  return [{ role: 'system', content: sys },
+    { role: 'user', content: '플레이어가 다가온 것에 짧게 반응해라.' }];
 }

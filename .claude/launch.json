@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "spum-serve",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["spum/serve.mjs"],
+      "port": 8790
+    }
+  ]
+}

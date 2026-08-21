@@ -15,11 +15,20 @@ export const CAST = [
   { id: 'sgn_ruby',  name: '루비',  job: '대학원생',          age: 23 },
 ];
 
+// 동네 사람 — 그날 밤 집 안에 없었다. 용의자도 목격자도 아니고, round.paths 에도 없다.
+// 그래서 knowledgeOf() 를 부르지 않는다 — 아는 것은 오직 마주쳐서 전해 들은 것뿐이다 (memory.mjs 의 createBlankMemory).
+export const VILLAGERS = [
+  { id: 'vlg_hoonhoon',  name: '훈훈',  job: '게임 클라이언트 개발자', age: 36 },
+  { id: 'vlg_hyeonu',    name: '혀누',  job: '백엔드 개발자',         age: 31 },
+  { id: 'vlg_yoru',      name: '요루',  job: '라이트노벨 작가',       age: 26 },
+  { id: 'vlg_soonsoon',  name: '순순',  job: '스타트업 CEO',          age: 42 },
+];
+
 export const SHIELDS = [
   { key: 'vegan',      line: '나는 비건이라 치즈는 입에 안 댄다',       break: '치즈를 맛있게 먹는 걸 봤다' },
   { key: 'lactose',    line: '우유만 들어가면 배탈이 난다',             break: '우유를 벌컥벌컥 마시는 걸 봤다' },
   { key: 'diet',       line: '요즘 다이어트 중이라 단 건 끊었다',       break: '밤에 군것질하는 걸 봤다' },
-  { key: 'sweet_hate', line: '원래 단 걸 안 좋아한다',                 break: '단 걸 제일 좋아한다는 걸 안다' },
+  { key: 'sweet_hate', line: '원래 단 걸 안 좋아한다',                 break: '단 거라면 사족을 못 쓰는 걸 봤다' },
   { key: 'allergy',    line: '치즈 알레르기가 있다',                   break: '멀쩡히 치즈를 먹는 걸 봤다' },
   { key: 'asleep',     line: '그 시간엔 자고 있었다',                   break: '그 시각 말짱히 돌아다니는 걸 봤다' },
   { key: 'unaware',    line: '케이크가 있는 줄도 몰랐다',               break: '케이크 이야기를 같이 나눈 적이 있다' },
@@ -180,4 +189,7 @@ export function approvedClaims(round, id) {
   return claims;
 }
 
-export const nameOf = (round, id) => (round.cast.find(c => c.id === id) || {}).name || id;
+// round.cast 는 여섯 하우스메이트뿐이다 — 동네 사람(VILLAGERS)의 이름도 여기서 찾아야
+// 소문 문장·로그에 아이디가 그대로 찍히지 않는다.
+export const nameOf = (round, id) =>
+  (round.cast.find(c => c.id === id) || VILLAGERS.find(v => v.id === id) || {}).name || id;

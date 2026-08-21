@@ -57,18 +57,32 @@ const st = async () => page.evaluate(() => ({
 await page.evaluate(() => {
   const g = window.__wamc;
   const n = Object.entries(g.npcState)[0];
-  for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1],[0,0]]) {
-    const x = n[1].gx + dx, y = n[1].gy + dy;
+  const gx = n[1].gx, gy = n[1].gy;
+  for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+    const x = gx + dx, y = gy + dy;
     if (g.isWalkable(x, y)) { g.warp(x, y); break; }
   }
 });
-await page.waitForTimeout(700);
-await page.keyboard.press('KeyE'); await page.waitForTimeout(500);
+await page.waitForTimeout(600);
+await page.keyboard.press('e'); await page.waitForTimeout(600);
 const afterE = await st();
 await page.keyboard.press('Escape'); await page.waitForTimeout(400);
 const afterEsc = await st();
-// Esc 뒤에 다시 걸어지는지
-const b4 = await pos(); await page.keyboard.press('KeyD'); await page.waitForTimeout(350); const af = await pos();
+
+// Esc 뒤에 다시 걸어지는지 (걸을 수 있는 방향을 찾아 누른다)
+const walkDir = await page.evaluate(() => {
+  const g = window.__wamc, px = g.playerGrid.x, py = g.playerGrid.y;
+  if (g.isWalkable(px + 1, py)) return 'KeyD';
+  if (g.isWalkable(px - 1, py)) return 'KeyA';
+  if (g.isWalkable(px, py + 1)) return 'KeyS';
+  if (g.isWalkable(px, py - 1)) return 'KeyW';
+  return 'KeyD';
+});
+const b4 = await pos();
+await page.keyboard.press(walkDir);
+await page.waitForTimeout(400);
+const af = await pos();
+
 await page.keyboard.press('Space'); await page.waitForTimeout(500);
 const afterSpace = await st();
 await page.keyboard.press('Escape'); await page.waitForTimeout(300);

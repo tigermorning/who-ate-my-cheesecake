@@ -26,6 +26,11 @@ export function keyOf(e) {
   }
 }
 
+// 동네 사람용 — 그날 밤 집에 없었으니 심어 줄 씨앗이 없다. 오직 마주쳐서 전해 듣는 것만 쌓인다.
+export function createBlankMemory(id) {
+  return { id, items: [], byKey: new Map() };
+}
+
 export function createMemory(round, id) {
   const mem = { id, items: [], byKey: new Map() };
   const k = knowledgeOf(round, id);

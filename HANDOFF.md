@@ -147,13 +147,17 @@ SAM 이 `Unknown model: ''` 로 404. `serve.mjs` 는 body 를 그대로 흘리�
   큰 반환값은 `[BLOCKED]` 될 수 있으니 **요약해서 반환**(`CLAUDE.md` §4-2).
 - **Playwright 스크립트는 삭제하지 않고 레거시로 남긴다.** 참고·재현용.
 
-게임 본체(`spum/play.html` + `serve.mjs`) 실행 방식은 **그대로**다 — 확장 전환과 무관하다:
+게임 본체(`spum/play.html` + `serve.mjs`) 실행 방식:
 `node spum/serve.mjs`(백그라운드) → `http://127.0.0.1:8790/spum/play.html`.
 
-이 세션에서 서버 기동 + play.html 로드 재확인함: 맵 렌더·캐스트 6종·HUD 정상, 콘솔 오류 0.
+## 완료 현황 (Step 1~7 완료)
+- **Step 1~4**: 플레이어/NPC 이동, A* 길찾기, 시간 루틴, 근접 대화
+- **Step 5 (NPC 기억+소통)**: 씨앗 기억, 귓속말/소문 번짐, 엿듣기, SAM 자연어 대화, 증언판(`harvest`) 연동
+- **Step 6 (LANDMARKS 연결)**: 12개 랜드마크 설명/오버레이 안내 및 E키/클릭 단서 조사 연결
+- **Step 7 (데모 검증)**: `verify-map.mjs`(15/15 길찾기), `verify-controls.mjs`(키/자율이동 5/5), `check-step5.mjs`(기억/대화/증언판), `roundtest.mjs`(4000판 검증) 전체 패스 (오류 0)
 
 ## 다음 할 일
-1. Step 5 (NPC 기억+소통) → Step 6 (LANDMARKS 연결) → Step 7 (데모 검증)
+1. 마케팅 데모 시연 및 플레이 테스트 (브라우저 직접 플레이)
 
 ## 막힌 것 / 주의
 - SPKG 암호화 → 스프라이트 직접 접근 불가
@@ -186,6 +190,80 @@ SAM 이 `Unknown model: ''` 로 404. `serve.mjs` 는 body 를 그대로 흘리�
 - `spum/round.mjs` — 라운드 로직
 - `spum/dialogue.mjs` — SAM LLM 통합
 - `spum/characters-backup.json` — 주입 직전 Studio localStorage 백업
+
+## 2026-08-21 — 동네 사람(마을 NPC) + 대사 길이·역할 소개 정리 (Claude Code)
+
+- **역할 소개 문장 정리** (`play.html` `myrole`): "식구들은 네가 [직업]라는 건 안다" 줄과
+  "MBTI·경향·말투는 판에서 빠진다"는 줄을 둘 다 뺐다. 이제 역할·방패 두 줄만 보여준다.
+- **SPUM Studio "Cozy Supermarket" 월드가 안 움직인 원인**: 스폰 좌표 10개가 40×30 맵에서
+  x19~23·y12~16 반경 4~5칸에 다 몰려 있어 서로 길을 막아(`blocked`) 아무도 못 움직였다.
+  대화(LLM)는 자리 이동이 필요 없어 정상 작동 — 그래서 "말은 하는데 안 움직인다"로 보였다.
+  → 배치는 사용자가 직접 다시 함(코드 아님).
+- **동네 사람(VILLAGERS) 추가** — 반장님(`vlg_banjang`)·민지(`vlg_minji`) 2명. `round.paths` 밖이라
+  용의자·목격자가 아니고, 빈 기억(`createBlankMemory`)으로 시작해 마주쳐야만 알게 된다.
+  대문 앞 인도(`house.mjs` 의 '집 앞 길', y=29)에 스폰.
+  - `round.mjs`: `VILLAGERS` export. `nameOf` 가 VILLAGERS 도 찾도록 고침 — 안 그러면 소문·로그에
+    아이디 문자열이 그대로 찍힌다.
+  - `memory.mjs`: `createBlankMemory(id)`.
+  - `dialogue.mjs`: `buildGossipMessages` 에 `freshToListener` 추가 — 상대가 처음 듣는지(알려주는
+    말투) vs 이미 아는지(맞장구 말투)로 SAM 프롬프트가 갈린다. 기존 `gossipOnce` 의 `fresh` 값을
+    그대로 흘려보내 재사용 — 새 사실 전파 로직을 따로 안 만들었다. 신규 `buildSuspectTalkMessages`
+    — 하우스메이트끼리 "누굴까" 짐작(확정하지 않는 잡담, 넘길 사실 없이 성립).
+  - `play.html`: `WANDERERS()`(하우스메이트+동네사람 — 렌더·이동·소문 대상) /
+    `ALL_VISIBLE()`(+플레이어 — 그림자·오버레이·SPUM 런타임 싱크 대상) 신설. 심문 대상
+    (`NPCS()` — 로스터 목록·클릭·E키 근접 대화)은 하우스메이트 6명 그대로 — 동네 사람은
+    배경에서 걷고 소문만 나누고, 플레이어가 직접 Q&A 로 캐물을 수는 없다(round.mjs 에
+    paths/knowledgeOf 가 없어서 물으면 죽는다 — 그래서 의도적으로 막았다).
+    `updateGossip()` 에서 하우스메이트끼리 짝은 35% 확률로 소문 대신 짐작 잡담을 튼다.
+  - 확인(브라우저 실측): 콘솔 오류 0, 스폰 좌표 걸을 수 있음(`isWalkable` true), 실제로 걸어 다님
+    (수 초 사이 좌표 변화 확인). **소문 발생 자체는 실시간으로 못 봤다** — 백그라운드 탭이라
+    `requestAnimationFrame` 이 느려진 상태였고(§5-3), 집이 넓어 하우스메이트와 마주치기까지
+    시간이 걸린다. SAM 이 실제로 좋은 문장을 짓는지도 API 호출까지는 확인 못 했다.
+- **대사 길이 축소** (플레이어가 "대화가 한꺼번에 몰리면 못 알아본다"고 지적): `dialogue.mjs` 의
+  응답 길이 가이드를 전원 최대 두 문장으로 줄이고 "문장 자체도 짧게 끊는다" 지시를 추가했다.
+  `play.html` 의 `max_tokens` 를 220/200 → 120 으로 낮춰 하드 캡을 걸었다.
+
+## 2026-08-21 — SPUM Studio 를 배치·캐스트 정본으로 삼음 (Claude Code)
+
+**계기**: `localhost:8790` 게임의 NPC 배치가 Studio World Editor("Cozy Supermarket")와 달랐다.
+원인 — `spum/house-map.json` 의 `spawnPoints` 가 비어 있어서(§`spum/studio-pull.mjs` 는 목록만
+보고 저장은 안 함) 게임이 Studio 배치를 아예 못 받고, `house.mjs` 에 박힌 옛 "House" 도면 좌표를
+새 맵 위에 억지로 스냅해서 썼다. 거기다 동네 사람이 옛날 2명(반장님·민지)인 채로 안 바뀌어 있었다.
+
+**정본 확정**: 이제부터 **SPUM Studio "Cozy Supermarket" 월드가 배치·캐스트의 정본**이다.
+게임은 house.mjs 를 더 이상 안 쓴다.
+
+- `spum/house-map.json`: Studio 월드(`WORLD_mt1vyo7s_XRXTAB`)의 `cast[].spawnX/Y` 를 그대로
+  `spawnPoints`(태그 `actor`) 10개로 박아 넣었다.
+- `spum/round.mjs`: `VILLAGERS` 를 반장님·민지 2명 → 훈훈·혀누·요루·순순 4명으로 교체
+  (Studio 캐스트 이름 그대로, job 은 Studio `aiRole.title`).
+- `spum/dialogue.mjs`: `VOICE` 의 `vlg_banjang`/`vlg_minji` 카드를 지우고 새 4명 카드로 교체
+  (Studio `persona.speechStyle` 을 톤의 근거로 삼되, 예문은 새로 씀 — 사건 정보는 안 넣음, CHARACTER_SYSTEM.md §13).
+- `spum/play.html`: `house.mjs` import 제거. `SPOT`/`ZONES`/`roomOf` 시드를 파일 안에 직접 박아 넣고
+  (Studio 좌표를 그대로 시드값으로 씀 — spawnPoints 를 못 찾았을 때만 쓰인다), `CHARACTER_EQUIP`/
+  `CHARACTER_COLORS`/`CHARACTER_EMOJI` 에 새 4명 항목 추가(장비·색은 Studio 캐스트 그대로 옮김).
+- 하우스메이트 6명(하루·미누·루루·피치·코코·루비)은 Studio 이름이 `cast.json` 기존 6명과
+  정확히 같아서 — 페르소나·`sgn_*` id 는 손 안 댔다.
+- `house.mjs` 와 그걸 쓰던 옛 파이프라인(House 도면 → Studio 로 굽기: `buildtheme.mjs` ·
+  `buildmap.mjs` · `compose.mjs` · `houseplan.mjs` · `render.mjs` · `spumart.mjs` · `studio-map*.mjs`)
+  은 `spum/legacy/` 로 옮겼다 — 방향이 반대(Studio → 게임)가 된 지금은 안 쓴다. `git mv` 라
+  기록은 남아 있다.
+- **배치 확인함(★★★★★)**: 처음엔 로컬 `house-map.json` 자체가 낡아서(24×24, `savedAt` 08-20 19:16)
+  Studio 좌표(40×30 맵 기준)가 안 맞았다. `spum/serve.mjs` 의 `/studio-export.js` +
+  `/api/import` 로 Studio 탭에서 현재 맵(40×30, `savedAt` 08-20 23:12)을 다시 뽑아
+  `spum/house-map.json`/`house-theme.png` 로 갈아 끼웠다(원본은 `spum/supermarket-*` 로도 남겨 둠).
+  `localhost:8790` 브라우저 실측 — 10명 전원 Studio `spawnX/Y` 와 좌표 정확히 일치, 겹침 0, 콘솔 에러 0.
+- **"맵이 작다" — 진짜 원인은 CSS 가 아니라 데이터였다(★★★★★)**: `.stage` 박스 크기(`fitStage()`)를
+  아무리 키워도 안 바뀐다고 해서 파봤더니, 40×30 캔버스 중 **실제로 그려진 칸은 x10~25·y5~20
+  (16×16, 21.3%)뿐**이었다 — 나머지 79%는 투명. CLAUDE.md §3-9 그 함정("이미지 생성은 항상
+  정사각형 1024px, 격자를 늘려도 그림은 안 넓어짐")이 실제로 터진 사례. 화면이 커 보여도 가운데
+  작은 정사각형만 채워져 있어 똑같이 작아 보였다.
+  → **Studio 를 다시 만지는 대신, 로컬 JSON 을 실제로 그려진 bbox(16×16)로 크롭**했다
+  (`spum/house-map.json`, back/front/obstacle/spawnPoints 전부 오프셋 -10,-5 로 재계산).
+  `spum/supermarket-map.json` 은 원본(40×30, 안 크롭) 그대로 남겨 뒀다 — 나중에 Studio 쪽 그림을
+  실제로 넓히면 이 크롭 스크립트는 필요 없어진다.
+  `fitStage()` 도 세로 높이 기준 축소를 걷어내고 가로폭을 그대로 쓰게 고쳤다(스크롤 허용).
+  실측: 스테이지 678×678, `#bg` 512×512(=16×32) 딱 맞음, 10명 좌표 정확, 콘솔 에러 0.
 
 ## 직전 세션 기록 위치
 OpenCode DB: `C:\Users\user\.local\share\opencode\opencode.db`

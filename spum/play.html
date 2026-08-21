@@ -51,9 +51,13 @@ header.top{display:flex;align-items:center;gap:14px;margin-bottom:14px}
 /* 너비는 칸에서 오지 않는다 — 곁창을 뺀 나머지를 채우고, 세로도 화면을 넘지 않게 JS 가 max-width 를 건다. */
 .stage{width:100%;margin:0 auto;border-radius:14px;border:1.5px solid var(--line);overflow:hidden;position:relative;background:#2A1F18;line-height:0}
 #bg{position:relative;display:block;width:100%;height:auto;image-rendering:pixelated;z-index:0}
-#scene,#overlay{position:absolute;top:0;left:0;width:100%;height:100%;image-rendering:pixelated}
-#scene{cursor:pointer;z-index:1}
-#overlay{z-index:2;pointer-events:none}
+/* !important 필수 — SPUM 런타임이 #scene 에 style="width:1280px;height:960px" 를
+   인라인으로 박아 넣어서, 이게 없으면 배경(#bg)만 fitStage() 크기로 줄고
+   캐릭터 캔버스(#scene)는 원본 픽셀 크기 그대로 남아 위치가 어긋난다. */
+#shadows,#scene,#overlay{position:absolute;top:0;left:0;width:100% !important;height:100% !important;image-rendering:pixelated}
+#shadows{z-index:1;pointer-events:none}
+#scene{cursor:pointer;z-index:2}
+#overlay{z-index:3;pointer-events:none}
 .roomtag{position:absolute;left:12px;top:10px;font-size:12px;font-weight:800;color:#fff;
   background:rgba(50,34,22,.62);padding:4px 10px;border-radius:999px;line-height:1.4}
 .log{height:96px;overflow:auto;padding:6px 2px;display:flex;flex-direction:column;gap:10px;margin-top:10px}
@@ -89,16 +93,16 @@ td.own{background:#EFF7EA}
 .hud-help dt.btn{background:var(--cream-2);border-color:var(--accent-2)}
 .hud-help dd{margin:2px 0 0;color:var(--ink-soft);overflow-wrap:break-word}
 .stage .overchat{position:absolute;left:12px;right:12px;bottom:10px;width:auto;z-index:3;
-  background:rgba(255,253,248,.78);backdrop-filter:blur(4px);border:1.5px solid rgba(231,211,184,.9);
-  border-radius:14px;box-shadow:0 8px 24px rgba(90,60,30,.20);padding:8px 10px;line-height:1.45;
-  opacity:.72;transition:opacity .15s}
+  background:rgba(255,253,248,.55);backdrop-filter:blur(5px);border:1.5px solid rgba(231,211,184,.85);
+  border-radius:14px;box-shadow:0 8px 24px rgba(90,60,30,.20);padding:8px 10px;line-height:1.45}
+/* 타이핑 중에도 뒤 맵이 계속 보여야 한다 — hover/focus 로 불투명해지면 그 순간 정작
+   대화 상대(NPC)가 화면에서 안 보인다. 항상 반투명을 유지한다. */
 .stage .overchat h3{display:none}
 .stage .overchat .ask{margin-top:6px}
 .stage .overchat .ask input{padding:8px 11px}
 .stage .overchat .quick{margin-top:5px;flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px}
 .stage .overchat .quick button{white-space:nowrap}
 .stage .overchat .msg{padding:7px 10px;border-radius:12px}
-.stage .overchat:hover,.stage .overchat:focus-within{opacity:1;background:rgba(255,253,248,.96)}
 .stage .overchat.away{display:none}
 #chatToggle{position:absolute;left:14px;bottom:14px;z-index:4;padding:8px 14px;border-radius:999px;
   background:rgba(255,253,248,.9);backdrop-filter:blur(3px)}
@@ -168,6 +172,7 @@ dialog::backdrop{background:rgba(60,40,25,.45)}
     <section class="card stagecard" style="padding:8px">
       <div class="stage" id="stage" style="position:relative">
         <canvas id="bg" width="1536" height="1536"></canvas>
+        <canvas id="shadows" width="1536" height="1536"></canvas>
         <canvas id="scene" width="1536" height="1536"></canvas>
         <canvas id="overlay" width="1536" height="1536"></canvas>
         <div class="roomtag" id="roomtag"></div>
@@ -210,43 +215,67 @@ dialog::backdrop{background:rgba(60,40,25,.45)}
 <dialog id="dlg"><div class="dlg" id="dlgBody"></div></dialog>
 
 <script type="module">
-import { makeRound, knowledgeOf, nameOf, ROOMS, HOURS, CAST } from './round.mjs';
-import { buildMessages, buildGossipMessages, violations, classifyIntent, topicOf, MODEL } from './dialogue.mjs';
-import { createMemory, gossipOnce, gossipLine, noteAsked, memorySize, heardCount } from './memory.mjs';
-// 도면은 **기본값**일 뿐이다. 맵(house-map.json)이 크기·자리·방을 들고 있으면 그쪽이 정본이다.
-import { W as HW, H as HH, SPOT as SPOT0, ZONES as ZONES0, roomOf as roomOf0 } from './house.mjs';
-let SPOT = JSON.parse(JSON.stringify(SPOT0));
-let ZONES = ZONES0.slice();
-let roomOf = roomOf0;
+import { makeRound, knowledgeOf, nameOf, ROOMS, HOURS, CAST, VILLAGERS } from './round.mjs';
+import { buildMessages, buildGossipMessages, buildSuspectTalkMessages, buildGreetingMessages, buildChaseMessages, buildIncidentGossipMessages, buildRecountMessages, isFarewell, violations, classifyIntent, topicOf, MODEL, VOICE } from './dialogue.mjs';
+import { createMemory, createBlankMemory, gossipOnce, gossipLine, noteAsked, memorySize, heardCount } from './memory.mjs';
+// 맵(supermarket-map.json)이 크기·자리·방을 정본으로 들고 있다 — SPUM Studio "Cozy Supermarket" 월드에서 그대로 뽑는다.
+// 여기 자리는 spawnPoints 를 못 찾았을 때만 쓰는 시드값이다 (Studio 월드 좌표를 그대로 넣어 뒀다).
+let SPOT = {
+  sgn_haru:  { room: '', x: 2, y: 7 },
+  sgn_minu:  { room: '', x: 12, y: 7 },
+  sgn_lulu:  { room: '', x: 13, y: 3 },
+  sgn_peach: { room: '', x: 13, y: 7 },
+  sgn_coco:  { room: '', x: 3, y: 3 },
+  sgn_ruby:  { room: '', x: 3, y: 7 },
+  vlg_hoonhoon: { room: '', x: 3, y: 15 },
+  vlg_hyeonu:   { room: '', x: 8, y: 3 },
+  vlg_yoru:     { room: '', x: 4, y: 15 },
+  vlg_soonsoon: { room: '', x: 12, y: 3 },
+  player:    { room: '', x: 8, y: 8 },
+};
+let ZONES = [];
+let roomOf = () => null;
 import { loadSpumMap } from './spummap.mjs';
 
 const $ = s => document.querySelector(s);
 const el = (t, c, x) => { const e = document.createElement(t); if (c) e.className = c; if (x != null) e.textContent = x; return e; };
 
 // ── 캐릭터 외모 (SPUM equipment) ─────────────────────────────
+// 2026-08-21 SPUM Studio Cast Editor 재작업분으로 갈아 끼웠다 (전원 human 피부 통일 + 알록달록 머리색).
 const CHARACTER_EQUIP = {
-  sgn_haru:  { body: 'legacy_body_human_1', eye: 'legacy_eye_3', helmet: 'modernpackver1_hoodie', clothing: 'modernpackver1_winter1_c2', pants: 'elf_elf_pant_06' },
-  sgn_minu:  { body: 'legacy_body_human_4', eye: 'legacy_eye_3', helmet: 'elf_helmet_17', clothing: 'elf_elf_cloth_09', pants: 'elf_elf_pant_03' },
-  sgn_coco:  { body: 'legacy_body_human_2', eye: 'legacy_eye_3', helmet: 'legacy_helmet_1', clothing: 'modernpackver1_hoodie_c2', pants: 'elf_elf_pant_04' },
-  sgn_lulu:  { body: 'legacy_body_elf_1', eye: 'legacy_eye_3', helmet: 'elf_helmet_06', clothing: 'legacy_f_sr_cloth', pants: 'legacy_f_sr_pants' },
-  sgn_peach: { body: 'legacy_body_human_3', eye: 'legacy_eye_3', helmet: 'elf_helmet_12', clothing: 'modernpackver1_hoodie', pants: 'elf_elf_pant_06' },
-  sgn_ruby:  { body: 'legacy_body_human_1', eye: 'legacy_eye_3', helmet: 'elf_helmet_12', clothing: 'legacy_f_sr_cloth', pants: 'legacy_f_sr_pants' },
+  sgn_haru:  { body: 'legacy_body_human_1', eye: 'legacy_eye_0', hair: 'legacy_hair_6',    clothing: 'elf_elf_cloth_04',    pants: 'chosunset_pant002' },
+  sgn_minu:  { body: 'legacy_body_human_1', eye: 'legacy_eye_0', hair: 'legacy_hair_7',    clothing: 'elf_elf_cloth_10',    pants: 'chosunset_pant001' },
+  sgn_lulu:  { body: 'legacy_body_human_1', eye: 'legacy_eye_0', hair: 'elf_elf_hair_06',  clothing: 'elf_elf_cloth_04',    pants: 'chosunset_pant001' },
+  sgn_peach: { body: 'legacy_body_human_1', eye: 'legacy_eye_0', hair: 'elf_elf_hair_03',  clothing: 'chosunset_cloth012',  pants: 'chosunset_pant002' },
+  sgn_coco:  { body: 'legacy_body_human_1', eye: 'legacy_eye_0', hair: 'elf_elf_hair_05',  clothing: 'elf_elf_cloth_05',    pants: 'elf_elf_pant_01' },
+  sgn_ruby:  { body: 'legacy_body_human_1', eye: 'legacy_eye_0', hair: 'legacy_hair_2',    clothing: 'legacy_cloth_7',      pants: 'elf_elf_pant_03' },
+  // 동네 사람 — SPUM Studio "Cozy Supermarket" 캐스트 장비를 그대로 옮겨왔다.
+  vlg_hoonhoon: { body: 'legacy_body_human_3', eye: 'legacy_eye_10', hair: 'ver300_new_hair_20', helmet: 'chosunset_helmet_001', armor: 'chosunset_armor008', clothing: 'chosunset_cloth004', pants: 'chosunset_pant001', back: 'legacy_back_3' },
+  vlg_hyeonu:   { body: 'legacy_body_human_2', hair: 'modernpackver1_hair_m06', facehair: 'modernpackver1_face_acc_m01', clothing: 'modernpackver1_hoodie_c2', pants: 'elf_elf_pant_08' },
+  vlg_yoru:     { body: 'legacy_body_human_1', eye: 'legacy_eye_0', hair: 'modernpackver1_hair_m09', clothing: 'elf_elf_cloth_16', pants: 'modernpackver1_foot_m02' },
+  vlg_soonsoon: { body: 'legacy_body_human_1', eye: 'legacy_eye_0', hair: 'legacy_hair_9', helmet: 'elf_elf_helmet_06', clothing: 'legacy_f_sr_cloth', pants: 'elf_pant_13' },
 };
+// body 색은 일부러 안 넣는다 — 전원 human 기본 피부색으로 통일하기로 했다.
 const CHARACTER_COLORS = {
-  sgn_haru:  { body: '#FFE4B5', helmet: '#FFD700', clothing: '#FFFACD', pants: '#FFF8DC', eye: '#3A3630' },
-  sgn_minu:  { body: '#E6E6FA', helmet: '#9370DB', clothing: '#DDA0DD', pants: '#EE82EE', eye: '#3A3630' },
-  sgn_coco:  { body: '#90EE90', helmet: '#228B22', clothing: '#98FB98', pants: '#F0FFF0', eye: '#3A3630' },
-  sgn_lulu:  { body: '#87CEEB', helmet: '#4682B4', clothing: '#B0E0E6', pants: '#E0FFFF', eye: '#3A3630' },
-  sgn_peach: { body: '#FFB6C1', helmet: '#FF69B4', clothing: '#FFC0CB', pants: '#FFE4E1', eye: '#3A3630' },
-  sgn_ruby:  { body: '#FF6347', helmet: '#DC143C', clothing: '#FF4500', pants: '#FF7F50', eye: '#3A3630' },
+  sgn_haru:  { hair: '#FFD700', eye: '#3A3630' },
+  sgn_minu:  { hair: '#E6E6FA', eye: '#3A3630' },
+  sgn_lulu:  { hair: '#87CEEB', eye: '#3A3630' },
+  sgn_peach: { hair: '#FF69B4', eye: '#3A3630' },
+  sgn_coco:  { hair: '#3CB371', eye: '#3A3630' },
+  sgn_ruby:  { hair: '#FF6347', eye: '#3A3630' },
+  vlg_hoonhoon: { eye: '#5c4033', hair: '#ffffff', armor: '#e28743', clothing: '#dcd1c4', pants: '#ebdcb9' },
+  vlg_hyeonu:   { eye: '#0078f8' },
+  vlg_yoru:     { eye: '#fca044' },
+  vlg_soonsoon: { eye: '#0080ff', hair: '#4d2e0f' },
 };
 const CHARACTER_EMOJI = {
   sgn_haru: '💻', sgn_minu: '📚', sgn_lulu: '☕', sgn_peach: '📋', sgn_coco: '✏️', sgn_ruby: '🎓',
+  vlg_hoonhoon: '🎮', vlg_hyeonu: '⚙️', vlg_yoru: '✍️', vlg_soonsoon: '🚀',
 };
 
 // ── 배경: SPUM 맵을 한 번 구워서 #bg 에 깐다 ────────────────
 // 런타임의 setGrid() 는 길찾기 전용이라 타일을 그리지 않는다.
-// 타일 그림은 SPUM Studio 에서 구운 house-theme.png 에서 그대로 온다.
+// 타일 그림은 SPUM Studio 에서 구운 supermarket-theme.png 에서 그대로 온다.
 let frontLayer = null;                 // 캐릭터보다 위에 그려질 층 (나무 우듬지·차양 …)
 function drawBackground() {
   if (!spumMap) return;
@@ -256,6 +285,15 @@ function drawBackground() {
   const baked = spumMap.bake();
   g.drawImage(baked, 0, 0, baked.width, baked.height, 0, 0, cv.width, cv.height);
   frontLayer = spumMap.bakeFront();    // 매 프레임 다시 굽지 않게 여기서 한 번만
+  // 은은한 비네트 — 화면 가운데로 시선을 모으고, 평판 스캔처럼 보이던 도면에
+  // "조명이 있는 공간" 느낌을 한 겹 얹는다. 타일은 그대로, 후처리 한 번뿐이다.
+  const vg = g.createRadialGradient(
+    cv.width / 2, cv.height / 2, Math.min(cv.width, cv.height) * 0.32,
+    cv.width / 2, cv.height / 2, Math.max(cv.width, cv.height) * 0.72,
+  );
+  vg.addColorStop(0, 'rgba(20,14,8,0)');
+  vg.addColorStop(1, 'rgba(20,14,8,0.30)');
+  g.fillStyle = vg; g.fillRect(0, 0, cv.width, cv.height);
 }
 
 // SPUM 런타임과 얼굴 굽기가 같은 정의를 본다.
@@ -330,7 +368,7 @@ function syncSPUM() {
   if (!spumRuntime || !spumMap) return;
   const gridData = { width: MW, height: MH, tileSize: TS, grid: spumWalk, signature: spumWalkSig };
   // 플레이어도 SPUM 캐릭터다 — 여섯 다 런타임이 그린다.
-  const castEntries = CAST.map(c => {
+  const castEntries = ALL_VISIBLE().map(c => {
     const isMe = c.id === PLAYER_ID;
     const gx = isMe ? playerGrid.x : (npcState[c.id]?.gx ?? SPOT[c.id].x);
     const gy = isMe ? playerGrid.y : (npcState[c.id]?.gy ?? SPOT[c.id].y);
@@ -362,19 +400,29 @@ const ROOM_POS = {}; ZONES.forEach(z => { ROOM_POS[z.name] = { x: z.x, y: z.y };
 // 맵을 읽은 뒤 다시 채운다
 function refreshRoomPos() { for (const k of Object.keys(ROOM_POS)) delete ROOM_POS[k]; ZONES.forEach(z => { ROOM_POS[z.name] = { x: z.x, y: z.y }; }); }
 
-let TS = 32, MW = HW, MH = HH;     // 테마 타일이 32px 이다 — 1:1 로 그린다. 맵을 읽으면 맞춰 바뀐다
+let TS = 32, MW = 16, MH = 16;     // 테마 타일이 32px 이다 — 1:1 로 그린다. 맵을 읽으면 맞춰 바뀐다
 // 무대는 도면 크기를 따른다 (48×48 → 1536²). 하드코딩하면 도면을 고칠 때마다 어긋난다.
-for (const id of ['#bg', '#scene', '#overlay']) {
+for (const id of ['#bg', '#shadows', '#scene', '#overlay']) {
   const c = document.querySelector(id); if (!c) continue;
   c.width = MW * TS; c.height = MH * TS;
 }
 // 맵은 가로로는 남는 칸을, 세로로는 화면 높이를 넘지 않는 선을 지킨다.
 // 예전처럼 `width = MW*TS` 로 못 박으면 곁창 옆에서 1536px 이 그대로 삐져나간다.
+// 위쪽 여백은 고정 150px 로 짐작하지 않는다 — 헤더 높이가 바뀌면 어긋난다.
+// `.stage` 가 실제로 화면에서 시작하는 y 좌표를 재서 남은 높이를 그대로 쓴다.
+// 가로·세로 둘 다 재서 더 좁은 쪽에 맞춘다 — 스크롤 없이 화면 안에 다 들어오면서,
+// 동시에 곁칸 폭도 넘치지 않게. (전에 세로만 봤다가 너무 작아졌던 것과, 가로만 봤다가
+// 스크롤이 생겼던 것 둘 다 겪고 나서 정착한 계산이다.)
 function fitStage() {
   const st = document.querySelector('.stage');
-  if (st) st.style.maxWidth = `calc((100vh - 150px) * ${(MW / MH).toFixed(4)})`;
+  if (!st) return;
+  const top = st.getBoundingClientRect().top || 0;
+  const availH = Math.max(240, window.innerHeight - top - 48);   // .wrap 아래쪽 여백(40px)까지 빼야 스크롤이 안 생긴다
+  const availW = (st.parentElement && st.parentElement.clientWidth) || window.innerWidth;
+  st.style.maxWidth = `${Math.round(Math.min(availW, availH * (MW / MH)))}px`;
 }
 fitStage();
+window.addEventListener('resize', fitStage);
 // SPUM 월드 유닛 배율. 런타임 허용 0.035~0.35 (넘기면 잘린다).
 // 0.055 는 한 칸에 딱 맞지만 너무 작아 얼굴이 안 보였다.
 // 타일이 32px 로 커졌으니 배율도 같이 올린다 (24px 때 0.12 = 32px 때 0.16).
@@ -383,10 +431,38 @@ fitStage();
 // 가구 옆에 서 있어도 가구 위에 올라선 것처럼 보였다. (`node spum/probe-size.mjs` 로 잰다)
 const UNIT_SCALE = 0.07;   // 실측 ≈ 2칸 높이 · 1칸 폭
 let bubbles = {};
+// 한 말풍선에 다 안 들어갈 만큼 길면, 억지로 욱여넣지 않고 문장 단위로 쪼개 순서대로 띄운다.
+let bubbleQueue = {};
+const BUBBLE_CHUNK_MS = 3200;   // 다음 문장으로 넘어가기까지 — 읽을 시간
+function splitSentences(text) {
+  return String(text).replace(/\n+/g, ' ').trim().split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(Boolean);
+}
+function setBubble(id, text, thought) {
+  const parts = splitSentences(text);
+  if (parts.length <= 1) { bubbles[id] = { text: String(text), at: Date.now(), thought: !!thought }; delete bubbleQueue[id]; return; }
+  bubbles[id] = { text: parts[0], at: Date.now(), thought: !!thought };
+  bubbleQueue[id] = { parts: parts.slice(1), thought: !!thought };
+}
+function advanceBubbleQueues() {
+  const now = Date.now();
+  for (const id of Object.keys(bubbleQueue)) {
+    const b = bubbles[id];
+    if (!b || now - b.at >= BUBBLE_CHUNK_MS) {
+      const q = bubbleQueue[id];
+      bubbles[id] = { text: q.parts[0], at: now, thought: q.thought };
+      if (q.parts.length > 1) bubbleQueue[id] = { parts: q.parts.slice(1), thought: q.thought };
+      else delete bubbleQueue[id];
+    }
+  }
+}
 
 // 플레이어는 여섯 하우스메이트 가운데 하나다 (CHARACTER_SYSTEM.md §8). 예전의 「고양이」 자리는 없앴다.
 let PLAYER_ID = null;
 const NPCS = () => CAST.filter(c => c.id !== PLAYER_ID);
+// 동네 사람은 용의자도 목격자도 아니다 — round.paths 밖이라 심문(NPCS) 대상엔 안 넣는다.
+// 화면에서 걷고 서로 소문을 나누는 것만 한다.
+const WANDERERS = () => [...NPCS(), ...VILLAGERS];
+const ALL_VISIBLE = () => [...WANDERERS(), CAST.find(c => c.id === PLAYER_ID)].filter(Boolean);
 const playerGrid = { x: 0, y: 0 };
 const playerPx = { x: 0, y: 0 };
 let playerQueue = [], playerMoving = false, playerPath = [], playerStep = 0, moveTimer = 0;
@@ -396,7 +472,7 @@ const npcState = {};
 // 플레이어를 고른 뒤에 자리를 잡는다 — 고른 캐릭터는 NPC 에서 빠진다.
 function seatCast() {
   for (const k of Object.keys(npcState)) delete npcState[k];
-  NPCS().forEach(c => {
+  WANDERERS().forEach(c => {
     npcState[c.id] = { gx: SPOT[c.id].x, gy: SPOT[c.id].y, px: SPOT[c.id].x * TS, py: SPOT[c.id].y * TS,
       tx: null, ty: null, path: [], step: 0, moving: false, timer: Math.random() * 120 + 30,
       targetRoom: null, mode: 'idle' };
@@ -411,7 +487,12 @@ const NPC_SPEED = 0.12;
 function isWalkable(x, y) {
   if (x < 0 || y < 0 || x >= MW || y >= MH) return false;
   if (!spumObstacle) return false;
-  return !spumObstacle[y * MW + x];
+  const i = y * MW + x;
+  // back(바닥 그림)이 없는 칸은 obstacle 상 안 막혀 있어도 "그림 없는 허공"이다 —
+  // Studio 가 격자는 40×30 으로 잡아놓고 그림은 가운데 일부에만 채운 맵에서
+  // 이걸 안 보면 캐릭터가 건물 밖 빈 칸으로 걸어 나간다.
+  if (spumMap?.back && !spumMap.back[i]) return false;
+  return !spumObstacle[i];
 }
 function findPath(sx, sy, ex, ey) {
   if (sx === ex && sy === ey) return [];
@@ -525,6 +606,8 @@ function advanceHour() {
   if (!round) return;
   currentHourIndex = (currentHourIndex + 1) % HOURS.length;
   NPCS().forEach(c => {
+    if (chatOpen() && c.id === cur) return;   // 대화 중인 상대는 시각이 바뀌어도 자리를 뜨지 않는다
+    if (npcState[c.id]?.mode === 'chase') return;   // 쫓아가는 중이면 시각이 바뀌어도 일정대로 끌려가지 않는다
     const targetRoom = round.paths[c.id][currentHourIndex];
     if (targetRoom) sendNPCtoRoom(c.id, targetRoom);
   });
@@ -533,9 +616,34 @@ function advanceHour() {
 function updateNPCs(dt) {
   hourTimer += dt;
   if (hourTimer >= HOUR_INTERVAL) { hourTimer = 0; advanceHour(); }
-  for (const c of CAST) {
-    if (c.id === PLAYER_ID) continue;
+  for (const c of WANDERERS()) {
+    // 대화 상대는 얼어붙는다 — 대화창을 닫아야(내가 끝내야) 다시 움직인다.
+    if (chatOpen() && c.id === cur) continue;
     const s = npcState[c.id];
+    if (s.mode === 'chase') {
+      if (s.moving) {
+        s.px += ((s.path[s.step].x * TS) - s.px) * NPC_SPEED;
+        s.py += ((s.path[s.step].y * TS) - s.py) * NPC_SPEED;
+        if (Math.abs(s.px - s.path[s.step].x * TS) < 1 && Math.abs(s.py - s.path[s.step].y * TS) < 1) {
+          s.gx = s.path[s.step].x; s.gy = s.path[s.step].y;
+          s.px = s.gx * TS; s.py = s.gy * TS;
+          s.step++;
+          if (s.step >= s.path.length) { s.moving = false; s.path = []; s.step = 0; }
+          const room = roomOf(s.gx, s.gy); if (room) SPOT[c.id].room = room;
+        }
+        continue;
+      }
+      const dist = Math.hypot(s.gx - playerGrid.x, s.gy - playerGrid.y);
+      if (dist <= PROXIMITY) {
+        s.mode = 'idle'; s.timer = Math.random() * 30 + 10;
+        triggerChaseCatch(c.id);
+        continue;
+      }
+      const path = findPath(s.gx, s.gy, playerGrid.x, playerGrid.y);
+      if (path && path.length) { s.path = path; s.step = 0; s.moving = true; }
+      else { s.mode = 'idle'; s.timer = Math.random() * 30 + 10; }   // 길이 안 보이면 조용히 포기한다
+      continue;
+    }
     if (s.moving && s.mode === 'moving') {
       s.px += ((s.path[s.step].x * TS) - s.px) * NPC_SPEED;
       s.py += ((s.path[s.step].y * TS) - s.py) * NPC_SPEED;
@@ -571,7 +679,96 @@ function updateNPCs(dt) {
 const PROXIMITY = 2;
 const LANDMARK_PROXIMITY = 2.2;
 let nearestNPC = null, nearestLandmark = null, proximityPulse = 0;
+// 다가가면 짧게 반응한다 — 대화(talks) 예산은 안 쓴다, 말풍선뿐이다.
+let prevNearNPC = null;
+const GREET_COOLDOWN = 30000;   // 같은 사람에게 자꾸 들락날락해도 30초 안엔 다시 안 반응한다
+const greetedAt = {};
+const GREETING_FALLBACKS = ['어, 왔어?', '무슨 일이야?', '오, 안녕.', '왜, 나한테 할 말 있어?'];
+async function phraseGreeting(speakerId) {
+  const fallback = GREETING_FALLBACKS[Math.floor(Math.random() * GREETING_FALLBACKS.length)];
+  if (!llmReady || gossipInFlight >= 1 || Date.now() < samCooldownUntil) return fallback;
+  gossipInFlight++;
+  try {
+    const msgs = buildGreetingMessages({ round, speakerId, persona: castPersona[speakerId] });
+    const r = await fetch('/api/sam/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: MODEL.fast, messages: msgs, temperature: 0.9, max_tokens: 60 }) });
+    if (r.status === 429) { samCooldownUntil = Date.now() + 45000; return fallback; }
+    const j = await r.json();
+    let t = String(j.choices?.[0]?.message?.content || '').trim();
+    if (!t) return fallback;
+    t = t.replace(/^["'“](.*)["'”]$/, '$1').trim();
+    return t || fallback;
+  } catch { return fallback; }
+  finally { gossipInFlight--; }
+}
+function triggerGreeting(id) {
+  const now = Date.now();
+  if ((greetedAt[id] || 0) && now - greetedAt[id] < GREET_COOLDOWN) return;
+  greetedAt[id] = now;
+  const fallback = GREETING_FALLBACKS[Math.floor(Math.random() * GREETING_FALLBACKS.length)];
+  setBubble(id, fallback);
+  phraseGreeting(id).then(line => setBubble(id, line));
+}
+// ── 마무리 인사 → 대화 종료 → (아직 볼일 남았으면) 쫓아가서 다시 붙잡기 ──────────
+// 플레이어든 NPC 든 마무리 말을 하면 대화창을 닫아 서로 다른 곳으로 움직일 수 있게 한다.
+// 플레이어가 먼저 끝낸 경우엔, 성향에 따라 그 NPC 가 아직 할 말이 남아 쫓아올 수도 있다.
+const CHASE_CHANCE = { talkative: 0.55, moderate: 0.35, reserved: 0.18 };
+const CHASE_FALLBACKS = [
+  '아니, 나 아직 할 얘기 있는데 그냥 가면 어떡해요?',
+  '나도 궁금한 게 있는데 혹시 지금 많이 바빠요?',
+  '잠깐만, 나 아직 말 안 끝났는데.',
+  '어, 벌써 가요? 나 할 말 남았는데.',
+];
+const chaseUsedThisRound = new Set();
+function maybeStartChase(npcId) {
+  if (!npcId || npcId === PLAYER_ID) return;
+  if (chaseUsedThisRound.has(npcId)) return;      // 한 판에 한 번만 — 계속 쫓아오면 성가시다
+  if (talks >= budget) return;                    // 대화 예산이 다 떨어졌으면 붙잡을 이유가 없다
+  const s = npcState[npcId]; if (!s || s.mode === 'chase') return;
+  const tendency = (VOICE[npcId] || {}).tendency || 'moderate';
+  if (Math.random() >= (CHASE_CHANCE[tendency] || 0.3)) return;
+  chaseUsedThisRound.add(npcId);
+  s.mode = 'chase'; s.moving = false; s.path = []; s.step = 0;
+}
+async function phraseChase(id) {
+  const fallback = CHASE_FALLBACKS[Math.floor(Math.random() * CHASE_FALLBACKS.length)];
+  if (!llmReady || gossipInFlight >= 1 || Date.now() < samCooldownUntil) return fallback;
+  gossipInFlight++;
+  try {
+    const msgs = buildChaseMessages({ round, speakerId: id, persona: castPersona[id], playerCard: playerCardOf() });
+    const r = await fetch('/api/sam/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: MODEL.fast, messages: msgs, temperature: 0.9, max_tokens: 70 }) });
+    if (r.status === 429) { samCooldownUntil = Date.now() + 45000; return fallback; }
+    const j = await r.json();
+    let t = String(j.choices?.[0]?.message?.content || '').trim();
+    if (!t) return fallback;
+    t = t.replace(/^["'“](.*)["'”]$/, '$1').trim();
+    return t || fallback;
+  } catch { return fallback; }
+  finally { gossipInFlight--; }
+}
+// 쫓아온 NPC 가 플레이어 옆에 닿았다 — 붙잡는 한마디를 뜬 뒤, 다시 대화를 이어갈 수 있게 연다.
+function triggerChaseCatch(id) {
+  const fallback = CHASE_FALLBACKS[Math.floor(Math.random() * CHASE_FALLBACKS.length)];
+  setBubble(id, fallback);
+  needsGreeting[id] = true;                        // 새로 붙잡은 참이니 다시 만나면 이름부터 부른다
+  if (!cur) { cur = id; renderRoster(); renderLog(); }
+  phraseChase(id).then(line => setBubble(id, line));
+}
+// 마무리 말 없이 그냥 걸어서 도망가는 경우 — 대화창이 열린 채로 있으면 그 상대는
+// (chatOpen() && c.id===cur) 얼어붙는 규칙 때문에 영영 못 쫓아온다. 일정 거리 밖으로
+// 벗어나면 "말없이 떠난 것"으로 보고 자동으로 닫아 쫓아올 기회를 준다.
+const WALK_AWAY_RANGE = 5;
+function checkWalkAway() {
+  if (!chatOpen() || !cur) return;
+  const s = npcState[cur]; if (!s) return;
+  const d = Math.hypot(s.gx - playerGrid.x, s.gy - playerGrid.y);
+  // 대화를 열 때 이미 멀었으면(로스터로 원격 대화 연 경우) 그 거리는 봐주고,
+  // 거기서 더 멀어졌을 때만 "말없이 도망"으로 본다.
+  if (d > Math.max(WALK_AWAY_RANGE, chatAnchorDist + 3)) closeChat(true);
+}
 function updateProximity() {
+  checkWalkAway();
   nearestNPC = null; let minD = Infinity;
   NPCS().forEach(c => {
     const s = npcState[c.id]; if (!s) return;
@@ -580,6 +777,8 @@ function updateProximity() {
     const d = Math.min(Math.hypot(s.gx - playerGrid.x, s.gy - playerGrid.y), Math.hypot(nx - playerGrid.x, ny - playerGrid.y));
     if (d < PROXIMITY && d < minD) { minD = d; nearestNPC = c.id; }
   });
+  if (nearestNPC && nearestNPC !== prevNearNPC && !chatOpen()) triggerGreeting(nearestNPC);
+  prevNearNPC = nearestNPC;
   if (nearestNPC && !cur) { cur = nearestNPC; renderRoster(); renderLog(); }
 
   nearestLandmark = null; let minLd = Infinity;
@@ -600,8 +799,20 @@ function inspectLandmark(lm) {
 const GOSSIP_RANGE = 2.5;      // 이 안에 들어와야 말을 섞는다
 const GOSSIP_COOLDOWN = 21000; // 같은 짝은 이 간격으로만 — 너무 빨리 오가면 읽을 틈이 없다
 const GOSSIP_PAIR_CAP = 4;     // 같은 짝은 한 판에서 최대 이만큼만 — 나눌 소재가 안 마르면 붙어 있는 한 무한정 이어진다
+// 짝별 쿨다운만 있으면, 시각이 바뀌어 여러 짝이 동시에 사거리 안에 들어온 순간
+// 전원이 같은 프레임에 한꺼번에 입을 열어 로그가 와르르 쏟아진다.
+// 이 값은 "맵 전체에서 소문 하나 터진 뒤 다음 소문까지" 최소 간격 — 속도 조절 다이얼.
+const GOSSIP_GLOBAL_GAP = 4000;
+let lastGlobalGossipAt = 0;
 const EARSHOT = 5;             // 플레이어가 이 안에 있으면 엿듣는다
 const BUBBLE_MS = 16000;       // 말풍선이 떠 있는 시간. drawOverlay() 도 이 값을 본다
+
+// 짝이 실제로 옆에 있는지 — 없으면 대화가 아니라 혼잣말(생각)로 그려야 한다
+function isNear(idA, idB) {
+  const sa = npcState[idA], sb = npcState[idB];
+  if (!sa || !sb) return false;
+  return Math.hypot(sa.gx - sb.gx, sa.gy - sb.gy) <= GOSSIP_RANGE;
+}
 
 function sysLine(text) {
   const bucket = cur ? (chat[cur] ||= []) : (chat.__intro ||= []);
@@ -617,12 +828,12 @@ function overhear(fromId, toId, g, line) {
 
 let gossipInFlight = 0, samCooldownUntil = 0;   // SAM 이 429 를 주면 잠깐 쉰다
 // 사실은 memory.mjs 가 고르고, 문장은 SAM 이 짓는다. SAM 이 없거나 밀리면 기본 문장을 쓴다.
-async function phraseGossip(speakerId, listenerId, g, fallback) {
+async function phraseGossip(speakerId, listenerId, g, fallback, freshToListener) {
   if (!llmReady || gossipInFlight >= 1 || Date.now() < samCooldownUntil) return fallback;
   gossipInFlight++;
   try {
     const msgs = buildGossipMessages({ round, speakerId, listenerId,
-      persona: castPersona[speakerId], fact: fallback, kind: (g.src || g.entry).k });
+      persona: castPersona[speakerId], fact: fallback, kind: (g.src || g.entry).k, freshToListener });
     const r = await fetch('/api/sam/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: MODEL.fast, messages: msgs, temperature: 0.85, max_tokens: 90 }) });
     if (r.status === 429) { samCooldownUntil = Date.now() + 45000; return fallback; }
@@ -641,10 +852,34 @@ async function phraseGossip(speakerId, listenerId, g, fallback) {
   finally { gossipInFlight--; }
 }
 
+// 하우스메이트끼리 "누굴까" 짐작 나누기 — 넘길 사실이 없어도 된다. 확정하지 않는 잡담이라 검증(violations)은 안 건다.
+const SUSPECT_TALK_FALLBACKS = [
+  '그러게, 대체 누구였을까?', '나는 좀 수상한 사람이 있긴 한데.', '다들 그럴 사람 같지는 않은데 말이야.', '아직은 감이 안 와.',
+];
+async function phraseSuspectTalk(speakerId, listenerId, fallback) {
+  if (!llmReady || gossipInFlight >= 1 || Date.now() < samCooldownUntil) return fallback;
+  gossipInFlight++;
+  try {
+    const msgs = buildSuspectTalkMessages({ round, speakerId, listenerId, persona: castPersona[speakerId], mem: memories[speakerId] });
+    const r = await fetch('/api/sam/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: MODEL.fast, messages: msgs, temperature: 0.9, max_tokens: 90 }) });
+    if (r.status === 429) { samCooldownUntil = Date.now() + 45000; return fallback; }
+    const j = await r.json();
+    let t = String(j.choices?.[0]?.message?.content || '').trim();
+    if (!t) return fallback;
+    t = t.replace(/^["'“](.*)["'”]$/, '$1').trim();
+    return t || fallback;
+  } catch { return fallback; }
+  finally { gossipInFlight--; }
+}
+
 function updateGossip() {
   if (!round) return;
   const now = Date.now();
-  const list = NPCS();
+  if (now - lastGlobalGossipAt < GOSSIP_GLOBAL_GAP) return;   // 전체 속도 제한 — 아직 다음 차례 아니다
+  const list = WANDERERS();
+  const isVillager = id => VILLAGERS.some(v => v.id === id);
+  const SUSPECT_TALK_CHANCE = 0.35;   // 하우스메이트끼리는 이따금 사실 교환 대신 "누굴까" 잡담을 한다
   for (let i = 0; i < list.length; i++) {
     for (let j = i + 1; j < list.length; j++) {
       const a = list[i], b = list[j];
@@ -658,12 +893,24 @@ function updateGossip() {
       // 부자연스럽고, 완만한 지연만 있으면 이론상 안 끝난다 — 둘을 같이 쓴다.
       const cooldown = GOSSIP_COOLDOWN * (1 + 0.5 * done);
       if (now - (gossipAt[pair] || 0) < cooldown) continue;
-      gossipAt[pair] = now;
       // 번갈아 말한다 — 한쪽만 떠드는 그림이 되지 않게
       gossipTurn[pair] = (gossipTurn[pair] || 0) + 1;
       const speaker = gossipTurn[pair] % 2 ? a : b, listener = gossipTurn[pair] % 2 ? b : a;
-      const g = gossipOnce(round, memories[speaker.id], memories[listener.id]);
-      if (!g) continue;
+      const bothHousemates = !isVillager(a.id) && !isVillager(b.id);
+
+      let base, phrasePromise;
+      if (bothHousemates && Math.random() < SUSPECT_TALK_CHANCE) {
+        // "누굴까" 짐작 — 새로 넘길 사실이 없어도 성립하니 gossipOnce 를 거치지 않는다.
+        base = SUSPECT_TALK_FALLBACKS[Math.floor(Math.random() * SUSPECT_TALK_FALLBACKS.length)];
+        phrasePromise = phraseSuspectTalk(speaker.id, listener.id, base);
+      } else {
+        const g = gossipOnce(round, memories[speaker.id], memories[listener.id]);
+        if (!g) continue;
+        base = gossipLine(round, g);
+        phrasePromise = phraseGossip(speaker.id, listener.id, g, base, g.fresh);
+      }
+      gossipAt[pair] = now;
+      lastGlobalGossipAt = now;
       gossipExchanges[pair] = done + 1;
       gossipCount++;
       // 말풍선이 떠 있는 동안 둘 다 다른 데로 서성이지 않게 자리를 지키게 한다.
@@ -672,16 +919,16 @@ function updateGossip() {
       const holdFrames = BUBBLE_MS / 16.667;
       if (sa) sa.timer = Math.max(sa.timer || 0, holdFrames);
       if (sb) sb.timer = Math.max(sb.timer || 0, holdFrames);
-      const base = gossipLine(round, g);
       const ss = npcState[speaker.id];
       const inEarshot = Math.hypot(ss.gx - playerGrid.x, ss.gy - playerGrid.y) <= EARSHOT;
-      bubbles[speaker.id] = { text: base, at: Date.now() };
-      phraseGossip(speaker.id, listener.id, g, base).then(line => {
-        bubbles[speaker.id] = { text: line, at: Date.now() };
-        if (inEarshot) overhear(speaker.id, listener.id, g, line);
+      setBubble(speaker.id, base);
+      phrasePromise.then(line => {
+        setBubble(speaker.id, line);
+        if (inEarshot) overhear(speaker.id, listener.id, null, line);
       });
       renderRoster();
       const pg = $('#pillGossip'); if (pg) pg.textContent = '소문 ' + gossipCount;
+      return;   // 이번 틱은 한 짝만 — 나머지는 다음 GOSSIP_GLOBAL_GAP 이후에
     }
   }
 }
@@ -723,23 +970,87 @@ let frame = 0, lastTick = performance.now();
 function tick(now = performance.now()) {
   frame = (frame + 1) % 15;
   const dt = (now - lastTick) / 16.667; lastTick = now;
-  updatePlayer(dt); tryStepPlayer(); updateNPCs(dt); updateProximity(); updateGossip();
+  updatePlayer(dt); tryStepPlayer(); updateNPCs(dt); updateProximity(); updateGossip(); advanceBubbleQueues();
   proximityPulse = (proximityPulse + dt * 0.05) % (Math.PI * 2);
   // SPUM 런타임이 #scene을 자체 rAF로 관리. 위치만 동기화.
   if (spumReady) syncSPUM();
+  // 바닥층(조명 웅덩이 + 발밑 그림자)은 #scene 보다 아래(#shadows)에 그려야 "바닥에 서 있다"로 보인다.
+  drawGroundLayer();
   // UI(이름·말풍선·방 태그)는 별도 #overlay에만 그린다.
   drawOverlay();
   requestAnimationFrame(tick);
+}
+
+// 캐릭터도 접지 그림자가 없으면 배경 위에 붙여넣은 스티커처럼 보인다.
+// SPUM 이 #scene 에 캐릭터를 직접 그리므로, 그 아래 깔린 #shadows 에
+// ① 벽난로·램프·창문 조명 웅덩이 ② 발밑 타원을 순서대로 얹는다. 새 에셋 없음 —
+// house.mjs 에 이미 있는 mantel/fireplace/lamp/window 좌표를 그대로 쓴다.
+function drawGroundLayer() {
+  const cv = $('#shadows'); if (!cv) return;
+  const cx = cv.getContext('2d'); cx.clearRect(0, 0, cv.width, cv.height);
+
+  const t = performance.now() / 1000;
+  const nightT = HOURS.length > 1 ? currentHourIndex / (HOURS.length - 1) : 0;
+  cx.globalCompositeOperation = 'lighter';
+  const glow = (px, py, r, color, alpha) => {
+    if (alpha <= 0) return;
+    const g = cx.createRadialGradient(px, py, 0, px, py, r);
+    g.addColorStop(0, `rgba(${color},${alpha})`);
+    g.addColorStop(1, `rgba(${color},0)`);
+    cx.fillStyle = g;
+    cx.beginPath(); cx.arc(px, py, r, 0, Math.PI * 2); cx.fill();
+  };
+  // 벽난로(mantel 20,3 + fireplace 21,4) — 서로 다른 두 sine 합으로 RNG 없이 흔들리는 불빛
+  const flicker = 0.85 + 0.10 * Math.sin(t * 13.7) + 0.05 * Math.sin(t * 5.3 + 1.7);
+  glow(20.5 * TS, 3.7 * TS, TS * 3.4 * flicker, '255,150,60', 0.34 * flicker);
+  // 램프 둘(식당 13,21 · 서재 25,21) — 불보다 흔들림 약하게
+  const lampFlicker = 0.94 + 0.06 * Math.sin(t * 3.1);
+  glow(13.5 * TS, 21.5 * TS, TS * 2.4, '255,196,120', 0.22 * lampFlicker);
+  glow(25.5 * TS, 21.5 * TS, TS * 2.4, '255,196,120', 0.22 * lampFlicker);
+  // 창문 달빛(9,25 · 21,25) — 00시 이후 깊은 밤에만 서서히
+  if (nightT >= 0.6) {
+    const moon = (nightT - 0.6) / 0.4;
+    glow(9.5 * TS, 26 * TS, TS * 2.6, '150,170,225', 0.14 * moon);
+    glow(21.5 * TS, 26 * TS, TS * 2.6, '150,170,225', 0.14 * moon);
+  }
+  cx.globalCompositeOperation = 'source-over';
+
+  ALL_VISIBLE().forEach(c => {
+    const isMe = c.id === PLAYER_ID;
+    const px = isMe ? playerPx.x : (npcState[c.id]?.px ?? SPOT[c.id].x * TS);
+    const py = isMe ? playerPx.y : (npcState[c.id]?.py ?? SPOT[c.id].y * TS);
+    const fx = px + TS / 2, fy = py + TS * 0.94;
+    cx.beginPath(); cx.ellipse(fx, fy, TS * 0.34, TS * 0.14, 0, 0, Math.PI * 2);
+    cx.fillStyle = 'rgba(15,10,6,0.32)'; cx.fill();
+  });
+}
+
+// 실제 글자 폭으로 줄바꿈한다 — 이전엔 14글자씩 잘라 2줄까지만 보여줘서 문장이 중간에 잘렸다.
+function wrapBubbleText(cx, text, maxWidth) {
+  const clean = String(text).replace(/\n+/g, ' ').trim();
+  const lines = []; let line = '';
+  for (const ch of clean) {
+    const test = line + ch;
+    if (line && cx.measureText(test).width > maxWidth) { lines.push(line); line = ch; }
+    else line = test;
+  }
+  if (line) lines.push(line);
+  return lines;
 }
 
 function drawOverlay() {
   const cv = $('#overlay'); if (!cv) return;
   const cx = cv.getContext('2d'); cx.clearRect(0, 0, cv.width, cv.height);
   cx.imageSmoothingEnabled = false;
+  // ⓪ 시간대 워시 — 게임 시계(21시~02시)에 맞춰 점점 어두워진다. #overlay 가 맨 위라
+  // 이 한 번의 fillRect 로 스택 전체가 어두워져 보인다. UI는 이 다음에 그려서 안 어두워짐.
+  const nightT = HOURS.length > 1 ? currentHourIndex / (HOURS.length - 1) : 0;
+  cx.fillStyle = `rgba(10,14,28,${(0.05 + nightT * 0.15).toFixed(3)})`;
+  cx.fillRect(0, 0, cv.width, cv.height);
   // ① 머리 위를 덮는 층을 먼저 얹는다 — 캐릭터가 나무·차양 뒤로 들어간다
   if (frontLayer) cx.drawImage(frontLayer, 0, 0, frontLayer.width, frontLayer.height, 0, 0, cv.width, cv.height);
   cx.font = '800 14px "Pretendard",system-ui'; cx.textAlign = 'center';
-  CAST.forEach(c => {
+  ALL_VISIBLE().forEach(c => {
     const s = SPOT[c.id]; if (!s) return;
     const isMe = c.id === PLAYER_ID;
     const px = isMe ? playerPx.x : (npcState[c.id]?.px ?? s.x * TS);
@@ -770,14 +1081,27 @@ function drawOverlay() {
     // 이름은 SPUM BubbleRenderer 가 캐릭터 위에 이미 그린다 — 여기서 또 그리지 않는다.
     const bub = bubbles[c.id];
     if (bub && Date.now() - bub.at < BUBBLE_MS) {
-      cx.font = '600 17px "Pretendard",system-ui';
-      const lines = bub.text.replace(/\n+/g, ' ').match(/.{1,18}/g)?.slice(0, 3) || [];
-      const bw = Math.max(...lines.map(l => cx.measureText(l).width)) + 24, bh = lines.length * 22 + 16;
-      const bx = px + TS / 2 - bw / 2, by = py - 14 - bh;
-      cx.fillStyle = 'rgba(255,253,248,.97)'; cx.strokeStyle = '#D9C29B'; cx.lineWidth = 2;
-      cx.beginPath(); cx.roundRect(bx, by, bw, bh, 12); cx.fill(); cx.stroke();
-      cx.fillStyle = '#4A3728';
-      lines.forEach((l, i) => cx.fillText(l, px + TS / 2, by + 26 + i * 22));
+      // 작고 반투명하게 — 뒤 맵과 다른 캐릭터가 말풍선에 가려지면 안 된다.
+      // 생각(thought)은 상대가 옆에 없을 때다 — 대화 말풍선과 헷갈리면 안 되니 모양을 다르게 그린다.
+      cx.font = (bub.thought ? 'italic ' : '') + '600 13px "Pretendard",system-ui';
+      const lines = wrapBubbleText(cx, bub.text, 190);
+      const bw = Math.min(190, Math.max(...lines.map(l => cx.measureText(l).width))) + 16, bh = lines.length * 17 + 10;
+      const bx = px + TS / 2 - bw / 2, by = py - 10 - bh;
+      if (bub.thought) {
+        // 대화 말풍선(밝은 크림색)과 한눈에 구별되게 — 검은 바탕에 흰 글씨, 보라 테두리
+        cx.fillStyle = 'rgba(18,16,26,.88)'; cx.strokeStyle = 'rgba(168,140,255,.9)'; cx.lineWidth = 2;
+        cx.setLineDash([3, 3]);
+        cx.beginPath(); cx.roundRect(bx, by, bw, bh, bh / 2); cx.fill(); cx.stroke();
+        cx.setLineDash([]);
+        // 꼬리 대신 동그라미 두 개 — 말풍선 꼬리(대화)와 구분되는 "생각" 표식
+        cx.beginPath(); cx.arc(px + TS / 2 - 3, by + bh + 6, 4, 0, Math.PI * 2); cx.fill(); cx.stroke();
+        cx.beginPath(); cx.arc(px + TS / 2 - 9, by + bh + 13, 2.5, 0, Math.PI * 2); cx.fill(); cx.stroke();
+      } else {
+        cx.fillStyle = 'rgba(255,253,248,.55)'; cx.strokeStyle = 'rgba(217,194,155,.6)'; cx.lineWidth = 1.5;
+        cx.beginPath(); cx.roundRect(bx, by, bw, bh, 9); cx.fill(); cx.stroke();
+      }
+      cx.fillStyle = bub.thought ? 'rgba(255,255,255,.95)' : 'rgba(74,55,40,.92)';
+      lines.forEach((l, i) => cx.fillText(l, px + TS / 2, by + 20 + i * 17));
     }
   });
   if (nearestLandmark && !nearestNPC) {
@@ -855,16 +1179,32 @@ function renderBoard() {
   t.append(hr);
   CAST.forEach(c => {
     const tr = el('tr'); tr.append(el('th', null, c.name));
-    HOURS.forEach(h => {
+    // 먼저 시각별 칸 내용을 다 계산해 두고, 같은 장소가 연달아 이어지면 한 칸으로 합친다.
+    // 충돌(conflict) 칸이나 빈 칸은 어느 시각인지 헷갈리면 안 되니 합치지 않는다.
+    const cells = HOURS.map(h => {
       const cell = board[c.id]?.[h] || [];
       const rooms = [...new Set(cell.map(x => x.room))];
       const discRooms = rooms.filter(r => (discovered[cur] || new Set()).has(h + '|' + r));
       const isConflict = discRooms.length > 1;
-      const td = el('td', isConflict ? 'conflict' : (cell.some(x => x.kind === 'own') ? 'own' : ''));
-      td.textContent = rooms.map(r => r[0]).join('/');
-      td.title = cell.map(x => `${x.room} — ${x.kind === 'own' ? '본인 진술' : '목격: ' + x.by}`).join('\n');
-      tr.append(td);
+      const cls = isConflict ? 'conflict' : (cell.some(x => x.kind === 'own') ? 'own' : '');
+      const text = rooms.join('/');
+      const title = cell.map(x => `${x.room} — ${x.kind === 'own' ? '본인 진술' : '목격: ' + x.by}`).join('\n');
+      return { text, cls, title };
     });
+    let i = 0;
+    while (i < cells.length) {
+      const info = cells[i];
+      let span = 1;
+      if (info.text && info.cls !== 'conflict') {
+        while (i + span < cells.length && cells[i + span].text === info.text && cells[i + span].cls === info.cls) span++;
+      }
+      const td = el('td', info.cls);
+      td.textContent = info.text;
+      td.title = info.title;
+      if (span > 1) td.colSpan = span;
+      tr.append(td);
+      i += span;
+    }
     t.append(tr);
   });
   b.append(t);
@@ -897,28 +1237,41 @@ function parseHoursInSentence(sent) {
   return list;
 }
 
+// 증언판엔 직접 확인된 것만 올린다 — "OO 말로는 ~있었대" 같은 전해 들은 문장은
+// 화자가 직접 겪거나 본 게 아니다. 그런 문장은 통째로 건너뛴다(record 자체를 안 부른다).
+// (플레이어의 증언판에 엿들은/전언 정보가 확정된 목격처럼 잘못 올라가던 버그 수정)
+const HEARSAY_RE = /(라고\s*(?:하더라|하던데|했|한다)|다고\s*(?:하더라|하던데|했|한다)|한테\s*들었|들었는데|들었다고|말로는|카더라|있었대|봤대|그랬대|전해\s*들)/;
+
 // 대화에서 「누가 · 몇 시에 · 어디」를 뽑아 증언판에 올린다.
 // 문장 단위로 보고, 방과 가장 가까운 시각을 짝짓는다.
 // 시각을 빼먹은 답("텃밭에 있었어")은 직전 화제의 시각 혹은 해당 인물의 방 동선으로 잇는다.
 function harvest(speaker, text, askedHour = null) {
   const t = topic[speaker] || {};
   let lastHour = askedHour || t.hour || null;
+  // 문장 맨 앞의 "루루야," 같은 호칭은 "누굴 봤다"는 진술이 아니다 — 지목 판정 전에 떼어낸다.
+  const VOCATIVE_RE = new RegExp('^\\s*(?:' + CAST.map(c => c.name).join('|') + ')[야아][,，]?\\s*');
   const put = (h, r, sent) => {
     if (!HOURS.includes(h) || !ROOMS.includes(r)) return;
-    const other = CAST.find(c => c.id !== speaker && sent.includes(c.name));
+    const body = sent.replace(VOCATIVE_RE, '');
+    const other = CAST.find(c => c.id !== speaker && body.includes(c.name));
     if (other) { record(other.id, h, r, 'seen', nameOf(round, speaker)); }
     else if (speaker !== 'player') record(speaker, h, r, 'own');
     t.hour = h; t.room = r; lastHour = h;
   };
   for (const sent of String(text).split(/[.!?\n]/)) {
-    if (!sent.trim()) continue;
-    const rs = ROOMS.map(r => ({ r, i: sent.indexOf(r) })).filter(x => x.i >= 0);
+    if (!sent.trim() || HEARSAY_RE.test(sent)) continue;
+    const rs = ROOMS.map(r => ({ r, i: sent.indexOf(r) })).filter(x => x.i >= 0).sort((a, b) => a.i - b.i);
     if (!rs.length) continue;
     const hs = parseHoursInSentence(sent);
     if (hs.length) {
-      rs.forEach(({ r, i }) => {
-        const near = hs.reduce((a, b) => Math.abs(b.i - i) < Math.abs(a.i - i) ? b : a);
-        put(near.h, r, sent);
+      // "21시랑 22시엔 데크에 있었어"처럼 한 장소 앞에 시각이 여러 개 몰릴 수 있다 —
+      // 그 구간(이전 장소~이 장소) 안의 시각을 전부 이 장소에 붙인다. 가장 가까운 시각
+      // 하나만 골랐던 예전 방식은 21시를 통째로 빠뜨렸다.
+      rs.forEach(({ r, i }, idx) => {
+        const segStart = idx > 0 ? rs[idx - 1].i : -Infinity;
+        const inSeg = hs.filter(h => h.i >= segStart && h.i < i + r.length + 100 && (idx === rs.length - 1 || h.i < rs[idx + 1].i));
+        if (inSeg.length) inSeg.forEach(h => put(h.h, r, sent));
+        else { const near = hs.reduce((a, b) => Math.abs(b.i - i) < Math.abs(a.i - i) ? b : a); put(near.h, r, sent); }
       });
     } else if (lastHour) {
       rs.forEach(({ r }) => put(lastHour, r, sent));
@@ -937,12 +1290,15 @@ function harvest(speaker, text, askedHour = null) {
 function say(who, text) {
   if (who === null) { (chat.__intro ||= []).push({ who: 'sys', text }); renderLog(); return; }
   chat[cur].push({ who, text });
-  if (who !== 'player') { bubbles[cur] = { text, at: Date.now() }; harvest(cur, text, lastAskedHour); }
+  if (who !== 'player') { setBubble(cur, text); harvest(cur, text, lastAskedHour); }
   else harvest('player', text);
   renderLog();
 }
 
 // ── 대사 ────────────────────────────────────────────────────
+// 대화 세션이 새로 열릴 때만 이름을 부른다 — 열려 있는 동안 계속 부르면 부자연스럽다.
+// closeChat() 이 여기 true 로 되돌려놔서, 닫았다가 나중에 다시 만나 새로 열면 또 한 번 부른다.
+const needsGreeting = {};
 let lastAskedHour = null;
 async function ask(id, userText) {
   const intent = classifyIntent(userText);
@@ -953,34 +1309,48 @@ async function ask(id, userText) {
   const mem = memories[id];
   // 물어본 것 자체가 기억에 남는다 — 나중에 다른 방에서 이 이야기가 돈다.
   noteAsked(round, mem, topicOf(intent, userText));
+  const sessionOpening = needsGreeting[id] !== false;
+  needsGreeting[id] = false;
   const msgs = buildMessages({ round, id, world, history: chat[id].slice(-8), userText, intent, mem,
-    persona: castPersona[id], playerCard: playerCardOf() });
-  if (!llmReady) return template(id, userText);
+    persona: castPersona[id], playerCard: playerCardOf(), sessionOpening });
+  if (!llmReady) return template(id, userText, sessionOpening);
   try {
     const r = await fetch('/api/sam/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: MODEL.normal, messages: msgs, temperature: 0.9, max_tokens: 220 }) });
+      body: JSON.stringify({ model: MODEL.normal, messages: msgs, temperature: 0.9, max_tokens: 120 }) });
     const j = await r.json();
     let text = j.choices?.[0]?.message?.content || j.output?.content || '';
     text = String(text).trim();
     const v = violations(round, id, text, mem);
     if (!v.ok) {
       const retry = await fetch('/api/sam/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: MODEL.normal, temperature: 0.6, max_tokens: 200,
+        body: JSON.stringify({ model: MODEL.normal, temperature: 0.6, max_tokens: 120,
           messages: [...msgs, { role: 'assistant', content: text },
             { role: 'user', content: '지금 말한 것 중에 네가 실제로 아는 게 아닌 시각·장소·사람이 섞였다. 아는 것만으로 다시 한 문장 말해라.' }] }) });
       const j2 = await retry.json();
       text = (j2.choices?.[0]?.message?.content || text).trim();
     }
-    return text || template(id, userText);
-  } catch { return template(id, userText); }
+    if (!text) return template(id, userText, sessionOpening);
+    // SAM 이 가끔 호칭 지시를 놓친다 — 세션 첫 마디인데 이름이 안 보이면 직접 붙인다.
+    const pname = playerCardOf().name;
+    if (sessionOpening && pname && !text.includes(pname)) text = vocative(pname) + ', ' + text;
+    return text;
+  } catch { return template(id, userText, sessionOpening); }
 }
-function template(id, q) {
+// 받침 있으면 "아", 없으면 "야" — SAM 이 없을 때(template)도 같은 규칙으로 부른다.
+function vocative(name) {
+  if (!name) return '';
+  const last = name.charCodeAt(name.length - 1) - 0xAC00;
+  if (last < 0 || last > 11171) return name;
+  return name + (last % 28 !== 0 ? '아' : '야');
+}
+function template(id, q, sessionOpening) {
   const k = knowledgeOf(round, id);
-  if (/먹었|케이크/.test(q)) return `아니. 안 먹었어. ${k.shield.line}.`;
-  if (/어디/.test(q)) return `${k.own[0].hour}엔 ${k.own[0].room}, ${k.own[1].hour}엔 ${k.own[1].room}에 있었어.`;
-  if (/이후|그 뒤/.test(q)) return `그 뒤엔 ${k.own[2].room}.`;
-  if (/누구|봤/.test(q)) return k.seen.length ? `${k.seen[0].hour}에 ${k.seen[0].room}에서 ${nameOf(round, k.seen[0].who)}를 봤어.` : '아무도 못 봤는데.';
-  return '음… 그건 잘 모르겠어.';
+  const lead = sessionOpening ? vocative(playerCardOf().name) + ', ' : '';
+  if (/먹었|케이크/.test(q)) return `${lead}아니. 안 먹었어. ${k.shield.line}.`;
+  if (/어디/.test(q)) return `${lead}${k.own[0].hour}엔 ${k.own[0].room}, ${k.own[1].hour}엔 ${k.own[1].room}에 있었어.`;
+  if (/이후|그 뒤/.test(q)) return `${lead}그 뒤엔 ${k.own[2].room}.`;
+  if (/누구|봤/.test(q)) return lead + (k.seen.length ? `${k.seen[0].hour}에 ${k.seen[0].room}에서 ${nameOf(round, k.seen[0].who)}를 봤어.` : '아무도 못 봤는데.');
+  return `${lead}음… 그건 잘 모르겠어.`;
 }
 async function send() {
   const v = $('#say').value.trim();
@@ -991,6 +1361,11 @@ async function send() {
   const a = await ask(cur, v);
   say(cur, a);
   btn.disabled = false; btn.textContent = '말한다';
+  // 둘 중 누구든 마무리 말을 하면, 잠깐 읽을 시간을 두고 대화창을 닫아 서로 움직일 수 있게 한다.
+  if (isFarewell(v) || isFarewell(a)) {
+    const byPlayer = isFarewell(v), closingId = cur;
+    setTimeout(() => { if (chatOpen() && cur === closingId) closeChat(byPlayer); }, 1400);
+  }
 }
 $('#send').onclick = send;
 $('#say').addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
@@ -1090,15 +1465,77 @@ async function pickPlayer() {
   return PLAYER_ID;
 }
 
+// ── 개장 장면 ──────────────────────────────────────────────
+// 게임은 슈퍼마켓에서 시작한다. 플레이어가 아직 아무것도 안 물었는데도, 동네 사람들끼리
+// "그런 일이 있었다며?" 소문을 주고받고, 하우스메이트 하나가 동네 사람에게
+// "아니 어제 우리 집에서 말이죠," 하며 사건을 들려주는 장면이 먼저 펼쳐진다.
+// 이건 증언판에는 안 올라간다(harvest 를 거치지 않는다) — 뜬소문·요약일 뿐, 확정된 진술이 아니다.
+const OPENING_REACT_FALLBACKS = ['헐, 진짜요?', '어머, 세상에.', '그래서 누가 그랬는지는 나왔대요?', '아이고, 큰일이었네요.'];
+// 상대가 실제로 옆에 없을 때 쓰는 혼잣말 — 대답하는 투가 섞이면 안 된다(누구 말을 받는 게 아니니까)
+const SOLO_THOUGHT_FALLBACKS = ['다들 그 얘기뿐이네, 진짜일까.', '누가 그랬을까...', '나도 한번 알아봐야겠다.', '오늘 밤은 뭔가 이상해.'];
+async function runOpeningLine(speakerId, listenerId, kind) {
+  // 상대가 옆에 없으면 대화가 아니라 생각이다 — 짓지 않고 정해둔 혼잣말만 쓴다
+  if (!isNear(speakerId, listenerId)) {
+    const text = SOLO_THOUGHT_FALLBACKS[Math.floor(Math.random() * SOLO_THOUGHT_FALLBACKS.length)];
+    setBubble(speakerId, text, true);
+    sysLine('(' + nameOf(round, speakerId) + ', 혼잣말) ' + text);
+    return;
+  }
+  let fallback, msgs = null;
+  if (kind === 'gossip-raise') { fallback = '그런 일 있었다며?'; msgs = buildIncidentGossipMessages({ round, speakerId, listenerId, persona: castPersona[speakerId], role: 'raise' }); }
+  else if (kind === 'gossip-react') { fallback = '어, 나도 그 얘기 들었어.'; msgs = buildIncidentGossipMessages({ round, speakerId, listenerId, persona: castPersona[speakerId], role: 'react' }); }
+  else if (kind === 'recount') { fallback = '아니 어제 우리 집에서 말이죠, 케이크가 없어졌지 뭐예요.'; msgs = buildRecountMessages({ round, speakerId, listenerId, persona: castPersona[speakerId] }); }
+  else { fallback = OPENING_REACT_FALLBACKS[Math.floor(Math.random() * OPENING_REACT_FALLBACKS.length)]; }
+  setBubble(speakerId, fallback);   // SAM 이 짓는 동안에도 말풍선은 바로 뜬다
+  let line = fallback;
+  if (msgs && llmReady) {
+    try {
+      const r = await fetch('/api/sam/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: MODEL.fast, messages: msgs, temperature: 0.85, max_tokens: 90 }) });
+      if (r.ok) {
+        const j = await r.json();
+        let t = String(j.choices?.[0]?.message?.content || '').trim();
+        if (t) { t = t.replace(/^["'“](.*)["'”]$/, '$1').trim(); if (t) line = t; }
+      }
+    } catch { /* 기본 대사로 넘어간다 */ }
+  }
+  setBubble(speakerId, line);
+  sysLine('(' + nameOf(round, speakerId) + ') ' + line);   // 로그에는 최종 대사 한 줄만 남긴다
+}
+function playOpeningScene() {
+  const vills = VILLAGERS.filter(v => npcState[v.id]);
+  const mates = NPCS().filter(c => npcState[c.id]);
+  if (vills.length < 2 || !mates.length) return;
+  const [vA, vB] = vills;
+  const mate = mates[Math.floor(Math.random() * mates.length)];
+  const vC = vills[Math.floor(Math.random() * vills.length)];
+  const steps = [
+    [vA.id, vB.id, 'gossip-raise'],
+    [vB.id, vA.id, 'gossip-react'],
+    [mate.id, vC.id, 'recount'],
+    [vC.id, mate.id, 'recount-react'],
+  ];
+  // 장면이 진행되는 동안엔 배회 타이머를 늘려서, 대사 도중에 자리를 뜨지 않게 붙잡아 둔다.
+  const holdUntil = 1200 + steps.length * 2200;
+  [vA.id, vB.id, mate.id, vC.id].forEach(id => { const s = npcState[id]; if (s) s.timer = Math.max(s.timer || 0, holdUntil / 16.667); });
+  steps.forEach(([speakerId, listenerId, kind], i) => {
+    setTimeout(() => runOpeningLine(speakerId, listenerId, kind), 1200 + i * 2200);
+  });
+}
+
 // ── 게임 시작 ──────────────────────────────────────────────
 function newRound() {
   round = makeRound((Math.random() * 2147483000) | 0, PLAYER_ID);
   seatCast();
   talks = 0; cur = null; currentHourIndex = 0; hourTimer = 0;
   CAST.forEach(c => { chat[c.id] = []; board[c.id] = {}; topic[c.id] = {}; memories[c.id] = createMemory(round, c.id); });
+  // 동네 사람은 그날 밤 집에 없었다 — 아는 것 없이 빈 기억으로 시작해서 마주쳐야만 알게 된다.
+  VILLAGERS.forEach(v => { chat[v.id] = []; board[v.id] = {}; topic[v.id] = {}; memories[v.id] = createBlankMemory(v.id); });
   Object.keys(gossipAt).forEach(k => delete gossipAt[k]);
   Object.keys(gossipTurn).forEach(k => delete gossipTurn[k]);
   Object.keys(gossipExchanges).forEach(k => delete gossipExchanges[k]);
+  Object.keys(needsGreeting).forEach(k => delete needsGreeting[k]);
+  chaseUsedThisRound.clear();
   gossipCount = 0; $('#pillGossip').textContent = '소문 0';
   Object.keys(discovered).forEach(k => delete discovered[k]);
   NPCS().forEach(c => {
@@ -1111,11 +1548,14 @@ function newRound() {
   renderRoster(); renderBoard(); renderLog(); renderTimeDisplay();
   const me = knowledgeOf(round, PLAYER_ID);
   const meName = (CAST.find(c => c.id === PLAYER_ID) || {}).name || '나';
+  // 내 진짜 동선 — 이걸 알아야 내 알리바이를 스스로 대고, 나를 엮으려는 거짓 목격도 잡아낸다.
+  const myPath = HOURS.map((h, i) => `${h} ${round.paths[PLAYER_ID][i]}`).join(' · ');
   $('#myrole').innerHTML = '넌 <b>' + meName + '</b>다. 넌 안 먹었다. <b>진짜 먹은 하나</b>를 찾아라.'
     + '<br><span class="note">네 방패: "' + me.shield.line + '"</span>'
-    + '<br><span class="note">식구들은 네가 ' + ((castPersonaAll[PLAYER_ID] || {}).occupation || '누구인지') + '라는 건 안다.'
-    + ' 하지만 네 MBTI·경향·말투는 판에서 빠진다 — 말은 네가 하고 싶은 대로 한다.</span>';
+    + '<br><span class="note"><b>네 동선</b>(알리바이): ' + myPath + '</span>';
   say(null, '아침이다. 냉장고 앞에 빈 접시만 덩그러니 놓여 있다. 어젯밤 집 안에는 여섯뿐이었다.');
+  say(null, '장을 보러 나온 슈퍼마켓, 벌써 동네에 소문이 돌기 시작한다.');
+  playOpeningScene();
 }
 
 async function boot() {
@@ -1133,23 +1573,36 @@ async function boot() {
   // ── 맵이 정본이다 ────────────────────────────────────────
   // 크기·시작 자리·방 이름표를 맵에서 받는다. Studio 에서 맵을 바꾸면 게임이 따라간다.
   TS = spumMap.TS || TS; MW = spumMap.W; MH = spumMap.H;
-  for (const id of ['#bg', '#scene', '#overlay']) {
+  for (const id of ['#bg', '#shadows', '#scene', '#overlay']) {
     const c = document.querySelector(id); if (c) { c.width = MW * TS; c.height = MH * TS; }
   }
   fitStage();
   if (spumMap.zones?.length) { ZONES = spumMap.zones; refreshRoomPos(); }
-  roomOf = (x, y) => spumMap.roomAt(x, y) ?? roomOf0(x, y);
-  // 맵의 시작 자리가 벽 위에 찍혀 있을 수 있다 — 가장 가까운 빈 칸으로 물러난다
+  // 이 맵(supermarket-map.json)엔 room 태그가 달린 objects[] 가 없다 — spumMap.roomAt() 은 항상 null.
+  // 그렇다고 house.mjs 의 roomOf0 로 떨어지면 "식당"·"거실" 같은 딴 집(옛 도면) 방 이름이 나온다 —
+  // 지금 맵은 그 집이 아니라 슈퍼마켓이다. room 태그가 없는 한 맵 이름 하나로 통일한다.
+  const MAP_LABEL = spumMap.map?.name || '가게';
+  roomOf = (x, y) => spumMap.roomAt(x, y) ?? MAP_LABEL;
+  // 맵의 시작 자리가 벽 위에 찍혀 있을 수 있다 — 가장 가까운 "걸을 수 있고 그림도 있는" 칸으로 물러난다.
+  // back(바닥 그림)까지 확인하는 이유: obstacle 이 0(안 막힘)이어도 back 이 0 이면 빈 칸(그림 없음)이라
+  // 건물 밖 허공에 서 있는 것처럼 보인다 — Studio 가 40×30 칸을 잡아놓고 그림은 가운데 일부에만 채운 경우.
   const snap = (x, y) => {
-    const free = (a, b) => a >= 0 && b >= 0 && a < MW && b < MH && !spumMap.obstacle[b * MW + a];
+    const free = (a, b) => a >= 0 && b >= 0 && a < MW && b < MH && !spumMap.obstacle[b * MW + a] && spumMap.back[b * MW + a];
     if (free(x, y)) return { x, y };
-    for (let r = 1; r <= 8; r++)
+    for (let r = 1; r <= 24; r++)
       for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++)
         if (Math.max(Math.abs(dx), Math.abs(dy)) === r && free(x + dx, y + dy)) return { x: x + dx, y: y + dy };
     return { x, y };
   };
-  for (const [id, a] of Object.entries(spumMap.actors || {}))
-    if (SPOT[id]) { const p = snap(a.x, a.y); SPOT[id] = { room: a.room || SPOT[id].room, x: p.x, y: p.y }; }
+  // spumMap.actors(맵이 직접 들고 있는 시작 자리)가 있으면 그걸 쓰고, 없으면(지금 이 맵처럼
+  // spawnPoints 가 비어 있으면) house.mjs 의 기본 좌표를 시드로 삼는다 — 둘 다 결국 이 맵 위의
+  // 실제 칸으로 snap 된다.
+  for (const id of Object.keys(SPOT)) {
+    const a = spumMap.actors[id];
+    const seed = a || SPOT[id];
+    const p = snap(seed.x, seed.y);
+    SPOT[id] = { room: (a && a.room) || spumMap.roomAt(p.x, p.y) || MAP_LABEL, x: p.x, y: p.y };
+  }
   spumObstacle = new Uint8Array(spumMap.obstacle);   // 1 = 막힘 (우리 A* 기준)
   // ⚠️ SPUM 런타임은 **정반대**다 — `setGrid` 의 기본값이 fill(1) 이고 그게 "다 걸을 수 있다"는 뜻이다.
   //    그래서 런타임에는 walkable(1 = 걸을 수 있음) 을 준다. 막힘표를 그대로 넘기면
@@ -1187,13 +1640,27 @@ window.__wamc = {
   get nearestLandmark() { return nearestLandmark; },
   get landmarks() { return spumMap ? spumMap.landmarks : []; },
   warp(x, y) { playerGrid.x = x; playerGrid.y = y; playerPx.x = x * TS; playerPx.y = y * TS; },
+  bubbles, updateProximity, needsGreeting,
 };
 
 // 대화창을 맵 위에 얹는다 — 아래에 있으면 맵을 보면서 말을 걸 수가 없다
 // 평소엔 접혀 있다가 말을 걸 때만 나온다. 맵을 가리지 않는 것이 먼저다.
 let chatCard = null;
-function openChat() { chatCard?.classList.remove('away'); const t = $('#chatToggle'); if (t) t.style.display = 'none'; $('#say')?.focus(); }
-function closeChat() { chatCard?.classList.add('away'); const t = $('#chatToggle'); if (t) t.style.display = ''; }
+// 대화창을 열 때의 거리를 기억해 둔다 — 로스터를 눌러 멀리 있는 NPC와도 원격으로 말을 걸 수 있는
+// 기존 방식(§물리적 근접 없이 클릭만으로 열기)이 있어서, "말없이 걸어서 도망" 판정이
+// 그 원격 대화까지 즉시 닫아버리면 안 된다 (checkWalkAway 참고).
+let chatAnchorDist = 0;
+function openChat() {
+  chatCard?.classList.remove('away'); const t = $('#chatToggle'); if (t) t.style.display = 'none'; $('#say')?.focus();
+  const s = cur && npcState[cur];
+  chatAnchorDist = s ? Math.hypot(s.gx - playerGrid.x, s.gy - playerGrid.y) : 0;
+}
+// byPlayer — 플레이어 쪽에서 끝낸 대화면 true (Esc·마무리 인사). NPC 가 먼저 마무리 인사를
+// 한 경우엔 false 로 불러서, 이미 떠나려는 NPC 가 자기 발로 다시 쫓아오는 모순을 막는다.
+function closeChat(byPlayer = true) {
+  chatCard?.classList.add('away'); const t = $('#chatToggle'); if (t) t.style.display = '';
+  if (cur) { needsGreeting[cur] = true; if (byPlayer) maybeStartChase(cur); }
+}
 function chatOpen() { return !!chatCard && !chatCard.classList.contains('away'); }
 // 증언판은 #board 를 품은 카드를 접었다 폈다 한다 (새 UI 를 만들지 않는다)
 function toggleBoard() {

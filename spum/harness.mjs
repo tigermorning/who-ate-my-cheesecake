@@ -63,7 +63,8 @@ function check(cat, name, ok, detail = '') { report[cat].push({ name, ok, detail
   const mem0 = createMemory(round, NPC);
   const hints = acts.map(act => {
     const sys = buildMessages({ round, id: NPC, world: premise.world, userText: 'x', intent: { act }, mem: mem0, persona: persona[NPC], playerCard })[0].content;
-    return sys.split('[대답하는 법]')[1]?.split('\n')[1] || '';
+    // [대답하는 법] 다음 줄은 sessionOpening 안내(호칭 여부)로 고정이다 — actHint 는 그 다음 줄.
+    return sys.split('[대답하는 법]')[1]?.split('\n')[2] || '';
   });
   check('SPEECH ACT', '화행 8종이 서로 다른 지침을 싣는다', new Set(hints).size === acts.length, hints.join(' | '));
 }

@@ -72,14 +72,16 @@ const STUDIO_EXPORT_JS = String.raw`
 
     const out = JSON.parse(JSON.stringify(map));
     out.tilesets = [Object.assign({}, ts, { tileProperties: newProps, columns: COLS })];
-    out.meta = Object.assign({}, out.meta, { themeSheet: 'house-theme.png', themeTiles: ids.length, fromStudio: true, pulledAt: new Date().toISOString() });
+    out.meta = Object.assign({}, out.meta, { themeSheet: 'supermarket-theme.png', themeTiles: ids.length, fromStudio: true, pulledAt: new Date().toISOString() });
 
     const r = await fetch('http://127.0.0.1:' + PORT + '/api/import', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ files: { 'house-map.json': out, 'house-theme.png': sheet.toDataURL('image/png') } }),
+      body: JSON.stringify({ files: { 'supermarket-map.json': out, 'supermarket-theme.png': sheet.toDataURL('image/png') } }),
     }).then(r => r.json()).catch(e => ({ ok: false, error: String(e) }));
     console.log('[SPUM→게임] 결과:', r, '· 타일 ' + ids.length + '/' + used.length + ' · 시트 ' + sheet.width + 'x' + sheet.height);
-    if (r.ok) console.log('[SPUM→게임] 끝났다. 게임 탭을 새로고침해라.');
+    // ⚠️ Studio 원본은 그림이 캔버스 전체를 안 채울 수 있다(CLAUDE.md §3-9) — 받은 뒤
+    // back 레이어의 실제 그려진 bbox 를 확인하고, 캔버스보다 작으면 그 bbox 로 잘라내라.
+    if (r.ok) console.log('[SPUM→게임] 끝났다. 게임 탭을 새로고침해라. (그림이 칸 전체를 안 채웠으면 크롭 필요 — CLAUDE.md §3-9)');
     return r;
   };
 
@@ -318,7 +320,7 @@ function normalizeSamBody(raw) {
 
   // ── 정적 파일 ─────────────────────────────────────────────
   // 어디서 부르든 읽을 수 있게 열어 둔다. 로그인된 SPUM 탭이 여기서
-  // smo.json · house-map.json 을 가져가 Studio 에 올린다.
+  // smo.json · supermarket-map.json 을 가져가 Studio 에 올린다.
   res.setHeader('Access-Control-Allow-Origin', '*');
   let p = path.join(ROOT, decodeURIComponent(url.pathname));
   if (url.pathname === '/') p = path.join(ROOT, 'spum', 'play.html');
