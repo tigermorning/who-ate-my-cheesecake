@@ -715,7 +715,7 @@ async function phraseGreeting(speakerId) {
   try {
     const msgs = buildGreetingMessages({ round, speakerId, persona: castPersona[speakerId] });
     const r = await fetch('/api/sam/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: MODEL.fast, messages: msgs, temperature: 0.9, max_tokens: 60 }) });
+      body: JSON.stringify({ model: MODEL.fast, messages: msgs, temperature: 0.9, max_tokens: 40 }) });
     if (r.status === 429) { samCooldownUntil = Date.now() + 45000; return fallback; }
     const j = await r.json();
     let t = String(j.choices?.[0]?.message?.content || '').trim();
@@ -761,7 +761,7 @@ async function phraseChase(id) {
   try {
     const msgs = buildChaseMessages({ round, speakerId: id, persona: castPersona[id], playerCard: playerCardOf() });
     const r = await fetch('/api/sam/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: MODEL.fast, messages: msgs, temperature: 0.9, max_tokens: 70 }) });
+      body: JSON.stringify({ model: MODEL.fast, messages: msgs, temperature: 0.9, max_tokens: 45 }) });
     if (r.status === 429) { samCooldownUntil = Date.now() + 45000; return fallback; }
     const j = await r.json();
     let t = String(j.choices?.[0]?.message?.content || '').trim();
@@ -838,10 +838,14 @@ const GOSSIP_PAIR_CAP = 4;     // 같은 짝은 한 판에서 최대 이만큼�
 // 짝별 쿨다운만 있으면, 시각이 바뀌어 여러 짝이 동시에 사거리 안에 들어온 순간
 // 전원이 같은 프레임에 한꺼번에 입을 열어 로그가 와르르 쏟아진다.
 // 이 값은 "맵 전체에서 소문 하나 터진 뒤 다음 소문까지" 최소 간격 — 속도 조절 다이얼.
-const GOSSIP_GLOBAL_GAP = 4000;
+// 예전엔 4000 이었는데, 말풍선이 뜨는 시간(BUBBLE_MS)보다 이 간격이 짧아서
+// 앞 소문이 채 사라지기도 전에 다음 소문이 겹쳐 뜨는 게 기본값이었다 — 간격을 늘린다.
+const GOSSIP_GLOBAL_GAP = 6500;
 let lastGlobalGossipAt = 0;
 const EARSHOT = 5;             // 플레이어가 이 안에 있으면 엿듣는다
-const BUBBLE_MS = 16000;       // 말풍선이 떠 있는 시간. drawOverlay() 도 이 값을 본다
+// 예전엔 16000 이었다 — 그만큼 오래 떠 있으니 그 사이 다른 소문이 하나둘 더 겹쳐 화면이
+// 말풍선으로 뒤덮였다. 짧게 뜨고 사라지게 줄여서 동시에 보이는 말풍선 수 자체를 줄인다.
+const BUBBLE_MS = 7000;        // 말풍선이 떠 있는 시간. drawOverlay() 도 이 값을 본다
 
 // 짝이 실제로 옆에 있는지 — 없으면 대화가 아니라 혼잣말(생각)로 그려야 한다
 function isNear(idA, idB) {
@@ -902,7 +906,7 @@ async function phraseGossip(speakerId, listenerId, g, fallback, freshToListener)
     const msgs = buildGossipMessages({ round, speakerId, listenerId,
       persona: castPersona[speakerId], fact: fallback, kind: (g.src || g.entry).k, freshToListener });
     const r = await fetch('/api/sam/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: MODEL.fast, messages: msgs, temperature: 0.85, max_tokens: 90 }) });
+      body: JSON.stringify({ model: MODEL.fast, messages: msgs, temperature: 0.85, max_tokens: 55 }) });
     if (r.status === 429) { samCooldownUntil = Date.now() + 45000; return fallback; }
     const j = await r.json();
     let t = String(j.choices?.[0]?.message?.content || '').trim();
@@ -929,7 +933,7 @@ async function phraseSuspectTalk(speakerId, listenerId, fallback) {
   try {
     const msgs = buildSuspectTalkMessages({ round, speakerId, listenerId, persona: castPersona[speakerId], mem: memories[speakerId] });
     const r = await fetch('/api/sam/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: MODEL.fast, messages: msgs, temperature: 0.9, max_tokens: 90 }) });
+      body: JSON.stringify({ model: MODEL.fast, messages: msgs, temperature: 0.9, max_tokens: 55 }) });
     if (r.status === 429) { samCooldownUntil = Date.now() + 45000; return fallback; }
     const j = await r.json();
     let t = String(j.choices?.[0]?.message?.content || '').trim();
@@ -1161,7 +1165,10 @@ function drawOverlay() {
       // 190 으로 다시 min 잡지 않는다 — 한 글자가 190 을 넘는 극단적 경우(긴 URL 등)에
       // 상자를 글자보다 좁게 그려서 글자가 상자 밖으로 삐져나오던 원인이었다.
       const bw = Math.max(...lines.map(l => cx.measureText(l).width)) + 16, bh = lines.length * 17 + 10;
-      const bx = px + TS / 2 - bw / 2;
+      const EDGE = 4;   // 캔버스 가장자리에서 이만큼은 늘 비워 둔다
+      // 화면(맵) 가장자리 근처 캐릭터는 상자가 캔버스 밖으로 나가 글자가 잘렸다 — 가로로 클램프한다.
+      let bx = px + TS / 2 - bw / 2;
+      bx = Math.max(EDGE, Math.min(bx, cv.width - bw - EDGE));
       let by = py - 10 - bh;
       // 이미 놓인 말풍선과 겹치면, 안 겹칠 때까지 그 위로 쌓아 올린다.
       for (let guard = 0; guard < 24; guard++) {
@@ -1170,8 +1177,10 @@ function drawOverlay() {
         if (!hit) break;
         by = hit.y - bh - 6;
       }
-      by = Math.max(4, by);   // 화면 위로 완전히 밀려나가진 않게 최소 여백만 보장
+      by = Math.max(EDGE, Math.min(by, cv.height - bh - EDGE));   // 위·아래 가장자리도 캔버스 안으로 클램프
       placedBubbleRects.push({ x: bx, y: by, w: bw, h: bh });
+      // 상자를 가로로 밀었을 수 있으니, 글자와 꼬리는 캐릭터 위(px)가 아니라 실제 상자 중심에 맞춘다.
+      const textCx = bx + bw / 2;
       if (bub.thought) {
         // 대화 말풍선(밝은 크림색)과 한눈에 구별되게 — 검은 바탕에 흰 글씨, 보라 테두리
         cx.fillStyle = 'rgba(18,16,26,.88)'; cx.strokeStyle = 'rgba(168,140,255,.9)'; cx.lineWidth = 2;
@@ -1179,14 +1188,14 @@ function drawOverlay() {
         cx.beginPath(); cx.roundRect(bx, by, bw, bh, bh / 2); cx.fill(); cx.stroke();
         cx.setLineDash([]);
         // 꼬리 대신 동그라미 두 개 — 말풍선 꼬리(대화)와 구분되는 "생각" 표식
-        cx.beginPath(); cx.arc(px + TS / 2 - 3, by + bh + 6, 4, 0, Math.PI * 2); cx.fill(); cx.stroke();
-        cx.beginPath(); cx.arc(px + TS / 2 - 9, by + bh + 13, 2.5, 0, Math.PI * 2); cx.fill(); cx.stroke();
+        cx.beginPath(); cx.arc(textCx - 3, by + bh + 6, 4, 0, Math.PI * 2); cx.fill(); cx.stroke();
+        cx.beginPath(); cx.arc(textCx - 9, by + bh + 13, 2.5, 0, Math.PI * 2); cx.fill(); cx.stroke();
       } else {
         cx.fillStyle = 'rgba(255,253,248,.55)'; cx.strokeStyle = 'rgba(217,194,155,.6)'; cx.lineWidth = 1.5;
         cx.beginPath(); cx.roundRect(bx, by, bw, bh, 9); cx.fill(); cx.stroke();
       }
       cx.fillStyle = bub.thought ? 'rgba(255,255,255,.95)' : 'rgba(74,55,40,.92)';
-      lines.forEach((l, i) => cx.fillText(l, px + TS / 2, by + 20 + i * 17));
+      lines.forEach((l, i) => cx.fillText(l, textCx, by + 20 + i * 17));
     }
   });
   if (nearestLandmark && !nearestPerson) {
@@ -1649,20 +1658,22 @@ async function pickPlayer() {
 // 이건 증언판에는 안 올라간다(harvest 를 거치지 않는다) — 뜬소문·요약일 뿐, 확정된 진술이 아니다.
 const OPENING_REACT_FALLBACKS = ['헐, 진짜요?', '어머, 세상에.', '그래서 누가 그랬는지는 나왔대요?', '아이고, 큰일이었네요.'];
 async function runOpeningLine(speakerId, listenerId, kind) {
-  let fallback, msgs = null;
-  if (kind === 'gossip-raise') { fallback = '그런 일 있었다며?'; msgs = buildIncidentGossipMessages({ round, speakerId, listenerId, persona: castPersona[speakerId], role: 'raise' }); }
-  else if (kind === 'gossip-react') { fallback = '어, 나도 그 얘기 들었어.'; msgs = buildIncidentGossipMessages({ round, speakerId, listenerId, persona: castPersona[speakerId], role: 'react' }); }
-  else if (kind === 'recount') { fallback = '아니 어제 우리 집에서 말이죠, 케이크가 없어졌지 뭐예요.'; msgs = buildRecountMessages({ round, speakerId, listenerId, persona: castPersona[speakerId] }); }
-  else { fallback = OPENING_REACT_FALLBACKS[Math.floor(Math.random() * OPENING_REACT_FALLBACKS.length)]; }
   // waitUntilNear() 가 시간 초과로 포기했을 수 있다 — 그럴 땐 청자가 실제로 옆에 없는
   // 채로 말하는 셈이니, 대화 말풍선이 아니라 혼잣말(생각 풍선)로 그린다 (DIALOGUE_SYSTEM.md §8.5).
+  // 존댓말·되묻는 말투("~다며?"/"~죠?")까지 그대로 남으면 상대 없이 묻는 것처럼 보이니,
+  // 프롬프트 자체도 "말을 거는" 프레이밍이 아니라 "혼자 중얼거리는" 프레이밍으로 바꾼다.
   const thought = !isNear(speakerId, listenerId);
+  let fallback, msgs = null;
+  if (kind === 'gossip-raise') { fallback = thought ? '그런 일이 있었다던데.' : '그런 일 있었다며?'; msgs = buildIncidentGossipMessages({ round, speakerId, listenerId, persona: castPersona[speakerId], role: 'raise', thought }); }
+  else if (kind === 'gossip-react') { fallback = thought ? '그 얘기 나도 들었는데.' : '어, 나도 그 얘기 들었어.'; msgs = buildIncidentGossipMessages({ round, speakerId, listenerId, persona: castPersona[speakerId], role: 'react', thought }); }
+  else if (kind === 'recount') { fallback = thought ? '어제 우리 집에서 케이크가 없어졌다지.' : '아니 어제 우리 집에서 말이죠, 케이크가 없어졌지 뭐예요.'; msgs = buildRecountMessages({ round, speakerId, listenerId, persona: castPersona[speakerId], thought }); }
+  else { fallback = OPENING_REACT_FALLBACKS[Math.floor(Math.random() * OPENING_REACT_FALLBACKS.length)]; }
   setBubble(speakerId, fallback, thought);   // SAM 이 짓는 동안에도 말풍선은 바로 뜬다
   let line = fallback;
   if (msgs && llmReady) {
     try {
       const r = await fetch('/api/sam/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: MODEL.fast, messages: msgs, temperature: 0.85, max_tokens: 90 }) });
+        body: JSON.stringify({ model: MODEL.fast, messages: msgs, temperature: 0.85, max_tokens: 55 }) });
       if (r.ok) {
         const j = await r.json();
         let t = String(j.choices?.[0]?.message?.content || '').trim();

@@ -576,56 +576,76 @@ export function buildChaseMessages({ round, speakerId, persona, playerCard = nul
 // 동네 사람들은 정확한 사실은 모르고 "그런 일이 있었다며?" 정도의 뜬소문만 안다.
 // role: 'raise' — 먼저 소문을 꺼낸다 / 'react' — 그 소문을 받아 되묻거나 맞장구친다.
 // 시각·장소 같은 확정 사실은 절대 담지 않는다 — round.mjs 가 승인한 적 없는 내용이다.
-export function buildIncidentGossipMessages({ round, speakerId, listenerId, persona, role = 'raise' }) {
+export function buildIncidentGossipMessages({ round, speakerId, listenerId, persona, role = 'raise', thought = false }) {
   if (round.playerId && speakerId === round.playerId) throw new Error('플레이어는 SAM 이 대신 말하지 않는다');
   const v = VOICE[speakerId] || { tone: '', shots: [], tendency: 'moderate' };
   const sys = [
     `[너의 배역] ${nameOf(round, speakerId)} — ${persona?.occupation || ''} (SPUM Cast)`,
     ...personaLines(persona, v.tone),
-    relationLine(persona, listenerId, nameOf(round, listenerId)) || '',
+    thought ? '' : relationLine(persona, listenerId, nameOf(round, listenerId)) || '',
     '',
-    `[상황] 슈퍼마켓에서 ${nameOf(round, listenerId)}와(과) 마주쳤다.`,
+    // thought === true: 상대가 아직 옆에 없다 — 마주쳐서 말을 거는 게 아니라 혼자 중얼거리는 것.
+    // "~와 마주쳤다" 프레이밍을 쓰면 없는 상대에게 존댓말로 묻는 것처럼 나가서, 대신 "혼잣말" 프레이밍을 쓴다.
+    thought
+      ? '[상황] 아직 아무도 옆에 없다. 동네에 어젯밤 하우스메이트들 집에서 뭔가 일이 있었다는 소문을 들어서,'
+        + ' 그 생각이 머릿속에 맴돈다.'
+      : `[상황] 슈퍼마켓에서 ${nameOf(round, listenerId)}와(과) 마주쳤다.`,
     role === 'raise'
-      ? '동네에 어젯밤 하우스메이트들 집에서 뭔가 일이 있었다는 소문이 돈다. 정확히는 모른다 — 그저 그런 일이 있었다는 것만 들었다.'
-        + ' 그 소문을 먼저 꺼낸다 ("그런 일이 있었다며?" 같은 취지).'
-      : '방금 상대가 "어젯밤 하우스메이트들 집에서 무슨 일이 있었다더라"는 소문을 꺼냈다. 너도 그 얘기를 들어서 아는 척 맞장구치거나, 더 캐묻는다.',
+      ? (thought
+        ? '정확히는 모른다 — 그저 그런 일이 있었다는 것만 들었다. 그 소문이 문득 떠올라 혼자 되뇐다.'
+        : '동네에 어젯밤 하우스메이트들 집에서 뭔가 일이 있었다는 소문이 돈다. 정확히는 모른다 — 그저 그런 일이 있었다는 것만 들었다.'
+          + ' 그 소문을 먼저 꺼낸다 ("그런 일이 있었다며?" 같은 취지).')
+      : (thought
+        ? '어디선가 "어젯밤 하우스메이트들 집에서 무슨 일이 있었다더라"는 소문을 들었던 게 떠올라 혼자 곱씹는다.'
+        : '방금 상대가 "어젯밤 하우스메이트들 집에서 무슨 일이 있었다더라"는 소문을 꺼냈다. 너도 그 얘기를 들어서 아는 척 맞장구치거나, 더 캐묻는다.'),
     '',
     '[쓰는 법]',
     '· 정확한 사실(누가·몇 시·어느 방)은 절대 지어내지 않는다 — 너는 그날 밤 그 집에 없었다.',
     '  "무슨 사고가 있었다더라" 수준의 뜬소문으로만 말한다.',
     '· 한 문장. 길어도 두 문장.',
     '· 반드시 캐릭터의 직접 대사만 출력한다. 큰따옴표, 지문, 부연설명 없이.',
-    '· 네 말투 그대로. 매번 다르게 말한다.',
-  ].join('\n');
+    thought
+      ? '· 상대를 부르거나 묻는 말투(-요?/-나요?/-지?) 금지. "~라던데.", "~라니." 처럼 혼자 중얼거리는 반말투로.'
+      : '· 네 말투 그대로. 매번 다르게 말한다.',
+  ].filter(Boolean).join('\n');
   return [{ role: 'system', content: sys },
-    { role: 'user', content: role === 'raise' ? '소문을 먼저 꺼내는 한마디만 말해라.' : '소문에 반응하는 한마디만 말해라.' }];
+    { role: 'user', content: (role === 'raise' ? '소문을' : '들었던 소문에') + (thought ? ' 대해 혼자 중얼거리는 한마디만 말해라.' : (role === 'raise' ? ' 먼저 꺼내는 한마디만 말해라.' : ' 반응하는 한마디만 말해라.')) }];
 }
 
 // 하우스메이트가 슈퍼마켓에서 동네 사람에게 "어젯밤 우리 집에서" 있었던 일을
 // 직접 들려주는 장면. 사건의 큰 줄기(치즈케이크가 없어졌다, 누가 그랬는지는 아직 모른다)만
 // 이야기한다 — 시각·방 같은 세부 사실은 round.mjs 가 승인한 것만 대야 하니 여기서는 다루지 않는다.
-export function buildRecountMessages({ round, speakerId, listenerId, persona }) {
+export function buildRecountMessages({ round, speakerId, listenerId, persona, thought = false }) {
   if (round.playerId && speakerId === round.playerId) throw new Error('플레이어는 SAM 이 대신 말하지 않는다');
   const v = VOICE[speakerId] || { tone: '', shots: [], tendency: 'moderate' };
   const isCulprit = round.culprit === speakerId;
   const sys = [
     `[너의 배역] ${nameOf(round, speakerId)} — ${persona?.occupation || ''} (SPUM Cast)`,
     ...personaLines(persona, v.tone),
-    relationLine(persona, listenerId, nameOf(round, listenerId)) || '',
+    thought ? '' : relationLine(persona, listenerId, nameOf(round, listenerId)) || '',
     '',
-    `[상황] 슈퍼마켓에서 ${nameOf(round, listenerId)}와(과) 마주쳤다. 어젯밤 네 집(하우스메이트들과 같이 사는 집)에서`,
-    '냉장고에 넣어 둔 치즈케이크가 없어진 걸 오늘 아침에 발견했다. 누가 먹었는지는 아직 아무도 모른다.',
-    '그 이야기를 먼저 꺼내 들려준다 ("아니 어제 우리 집에서 말이죠," 같은 취지로 시작해도 좋다).',
+    // thought === true: 아직 아무도 옆에 없다 — "들려준다" 프레이밍을 쓰면 없는 상대에게
+    // 존댓말로 말 거는 것처럼 나가서, 대신 혼잣말로 곱씹는 프레이밍을 쓴다.
+    thought
+      ? '[상황] 아직 아무도 옆에 없다. 어젯밤 네 집(하우스메이트들과 같이 사는 집)에서 냉장고에 넣어 둔 치즈케이크가'
+        + ' 없어진 걸 오늘 아침에 발견했다. 누가 먹었는지는 아직 아무도 모른다. 그 생각이 자꾸 떠올라 혼자 중얼거린다.'
+      : `[상황] 슈퍼마켓에서 ${nameOf(round, listenerId)}와(과) 마주쳤다. 어젯밤 네 집(하우스메이트들과 같이 사는 집)에서\n`
+        + '냉장고에 넣어 둔 치즈케이크가 없어진 걸 오늘 아침에 발견했다. 누가 먹었는지는 아직 아무도 모른다.\n'
+        + '그 이야기를 먼저 꺼내 들려준다 ("아니 어제 우리 집에서 말이죠," 같은 취지로 시작해도 좋다).',
     isCulprit ? '· 너는 사실 그걸 먹은 당사자지만, 지금은 그 사실을 숨기고 다른 사람들처럼 궁금해하는 척 말한다.' : '',
     '',
     '[쓰는 법]',
     '· 시각·방 같은 세부 사실은 지금 이야기에 넣지 않는다 — "누가·몇 시에·어디서" 는 아직 조사 중이라는 정도로만 말한다.',
     '· 한두 문장. 길어도 두 문장.',
     '· 반드시 캐릭터의 직접 대사만 출력한다. 큰따옴표, 지문, 부연설명 없이.',
-    '· 네 말투 그대로.',
+    thought
+      ? '· 상대를 부르거나 묻는 말투(-요?/-나요?/-지?) 금지. 혼자 중얼거리는 반말투로.'
+      : '· 네 말투 그대로.',
   ].filter(Boolean).join('\n');
   return [{ role: 'system', content: sys },
-    { role: 'user', content: `${nameOf(round, listenerId)}에게 어젯밤 있었던 일을 들려주는 한마디만 말해라.` }];
+    { role: 'user', content: thought
+      ? '어젯밤 있었던 일이 떠올라 혼자 중얼거리는 한마디만 말해라.'
+      : `${nameOf(round, listenerId)}에게 어젯밤 있었던 일을 들려주는 한마디만 말해라.` }];
 }
 
 // ── 플레이어가 다가왔을 때 NPC 의 즉흥 반응 ─────────────────────
