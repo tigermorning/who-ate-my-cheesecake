@@ -476,7 +476,7 @@ function seatCast() {
   WANDERERS().forEach(c => {
     npcState[c.id] = { gx: SPOT[c.id].x, gy: SPOT[c.id].y, px: SPOT[c.id].x * TS, py: SPOT[c.id].y * TS,
       tx: null, ty: null, path: [], step: 0, moving: false, timer: Math.random() * 120 + 30,
-      targetRoom: null, mode: 'idle' };
+      targetRoom: null, mode: 'idle', holdUntil: 0 };
   });
   const me = SPOT[PLAYER_ID];
   playerGrid.x = me.x; playerGrid.y = me.y;
@@ -632,6 +632,9 @@ function advanceHour() {
   NPCS().forEach(c => {
     if (chatOpen() && c.id === cur) return;   // 대화 중인 상대는 시각이 바뀌어도 자리를 뜨지 않는다
     if (npcState[c.id]?.mode === 'chase') return;   // 쫓아가는 중이면 시각이 바뀌어도 일정대로 끌려가지 않는다
+    // 다른 NPC 와 소문/개장 장면을 나누는 중이어도 안 끌고 간다 — 안 그러면 대화 도중
+    // 상대가 새 방으로 걸어가 버리고, 말풍선만 화면에 혼자 남아 "혼잣말"처럼 보인다.
+    if (Date.now() < (npcState[c.id]?.holdUntil || 0)) return;
     const targetRoom = round.paths[c.id][currentHourIndex];
     if (targetRoom) sendNPCtoRoom(c.id, targetRoom);
   });
@@ -729,6 +732,7 @@ function triggerGreeting(id) {
   const now = Date.now();
   if ((greetedAt[id] || 0) && now - greetedAt[id] < GREET_COOLDOWN) return;
   greetedAt[id] = now;
+  const s = npcState[id]; if (s) s.holdUntil = Math.max(s.holdUntil || 0, now + BUBBLE_MS);   // 반응하는 도중 시각 전환에 끌려가지 않게
   const fallback = GREETING_FALLBACKS[Math.floor(Math.random() * GREETING_FALLBACKS.length)];
   setBubble(id, fallback);
   phraseGreeting(id).then(line => setBubble(id, line));
@@ -773,6 +777,7 @@ async function phraseChase(id) {
 }
 // 쫓아온 NPC 가 플레이어 옆에 닿았다 — 붙잡는 한마디를 뜬 뒤, 다시 대화를 이어갈 수 있게 연다.
 function triggerChaseCatch(id) {
+  const s = npcState[id]; if (s) s.holdUntil = Math.max(s.holdUntil || 0, Date.now() + BUBBLE_MS);   // 붙잡은 직후 mode 가 idle 로 풀리니, 시각 전환에 안 끌려가게 따로 붙잡는다
   const fallback = CHASE_FALLBACKS[Math.floor(Math.random() * CHASE_FALLBACKS.length)];
   setBubble(id, fallback);
   needsGreeting[id] = true;                        // 새로 붙잡은 참이니 다시 만나면 이름부터 부른다
@@ -899,12 +904,12 @@ function overhear(fromId, toId, g, line) {
 
 let gossipInFlight = 0, samCooldownUntil = 0;   // SAM 이 429 를 주면 잠깐 쉰다
 // 사실은 memory.mjs 가 고르고, 문장은 SAM 이 짓는다. SAM 이 없거나 밀리면 기본 문장을 쓴다.
-async function phraseGossip(speakerId, listenerId, g, fallback, freshToListener) {
+async function phraseGossip(speakerId, listenerId, g, fallback, freshToListener, thought = false) {
   if (!llmReady || gossipInFlight >= 1 || Date.now() < samCooldownUntil) return fallback;
   gossipInFlight++;
   try {
     const msgs = buildGossipMessages({ round, speakerId, listenerId,
-      persona: castPersona[speakerId], fact: fallback, kind: (g.src || g.entry).k, freshToListener });
+      persona: castPersona[speakerId], fact: fallback, kind: (g.src || g.entry).k, freshToListener, thought });
     const r = await fetch('/api/sam/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: MODEL.fast, messages: msgs, temperature: 0.85, max_tokens: 55 }) });
     if (r.status === 429) { samCooldownUntil = Date.now() + 45000; return fallback; }
@@ -927,11 +932,11 @@ async function phraseGossip(speakerId, listenerId, g, fallback, freshToListener)
 const SUSPECT_TALK_FALLBACKS = [
   '그러게, 대체 누구였을까?', '나는 좀 수상한 사람이 있긴 한데.', '다들 그럴 사람 같지는 않은데 말이야.', '아직은 감이 안 와.',
 ];
-async function phraseSuspectTalk(speakerId, listenerId, fallback) {
+async function phraseSuspectTalk(speakerId, listenerId, fallback, thought = false) {
   if (!llmReady || gossipInFlight >= 1 || Date.now() < samCooldownUntil) return fallback;
   gossipInFlight++;
   try {
-    const msgs = buildSuspectTalkMessages({ round, speakerId, listenerId, persona: castPersona[speakerId], mem: memories[speakerId] });
+    const msgs = buildSuspectTalkMessages({ round, speakerId, listenerId, persona: castPersona[speakerId], mem: memories[speakerId], thought });
     const r = await fetch('/api/sam/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: MODEL.fast, messages: msgs, temperature: 0.9, max_tokens: 55 }) });
     if (r.status === 429) { samCooldownUntil = Date.now() + 45000; return fallback; }
@@ -969,16 +974,18 @@ function updateGossip() {
       const speaker = gossipTurn[pair] % 2 ? a : b, listener = gossipTurn[pair] % 2 ? b : a;
       const bothHousemates = !isVillager(a.id) && !isVillager(b.id);
 
+      // 트리거된 이 순간엔 실제로 붙어 있다(위에서 GOSSIP_RANGE 로 걸렀다) — 그대로 대화체로 짓는다.
+      // 다만 응답이 돌아올 즈음엔 떨어져 있을 수 있으니, 뜰 때마다 다시 확인한다(아래 두 setBubble).
       let base, phrasePromise;
       if (bothHousemates && Math.random() < SUSPECT_TALK_CHANCE) {
         // "누굴까" 짐작 — 새로 넘길 사실이 없어도 성립하니 gossipOnce 를 거치지 않는다.
         base = SUSPECT_TALK_FALLBACKS[Math.floor(Math.random() * SUSPECT_TALK_FALLBACKS.length)];
-        phrasePromise = phraseSuspectTalk(speaker.id, listener.id, base);
+        phrasePromise = phraseSuspectTalk(speaker.id, listener.id, base, false);
       } else {
         const g = gossipOnce(round, memories[speaker.id], memories[listener.id]);
         if (!g) continue;
         base = gossipLine(round, g);
-        phrasePromise = phraseGossip(speaker.id, listener.id, g, base, g.fresh);
+        phrasePromise = phraseGossip(speaker.id, listener.id, g, base, g.fresh, false);
       }
       gossipAt[pair] = now;
       lastGlobalGossipAt = now;
@@ -990,11 +997,17 @@ function updateGossip() {
       const holdFrames = BUBBLE_MS / 16.667;
       if (sa) sa.timer = Math.max(sa.timer || 0, holdFrames);
       if (sb) sb.timer = Math.max(sb.timer || 0, holdFrames);
+      // wander 뿐 아니라 시각 전환(advanceHour)도 이 둘을 붙잡아 둬야 한다 — 안 그러면
+      // 대화 중간에 시각이 바뀌어 상대가 새 방으로 걸어가 버리고 말풍선만 남는다.
+      const holdUntilTs = now + BUBBLE_MS;
+      if (sa) sa.holdUntil = Math.max(sa.holdUntil || 0, holdUntilTs);
+      if (sb) sb.holdUntil = Math.max(sb.holdUntil || 0, holdUntilTs);
       const ss = npcState[speaker.id];
       const inEarshot = Math.hypot(ss.gx - playerGrid.x, ss.gy - playerGrid.y) <= EARSHOT;
-      setBubble(speaker.id, base);
+      setBubble(speaker.id, base, !isNear(speaker.id, listener.id));
       phrasePromise.then(line => {
-        setBubble(speaker.id, line);
+        // 응답이 돌아올 때까지 상대가 떠났을 수 있다 — 그때도 대화체 그대로 내보내지 않는다.
+        setBubble(speaker.id, line, !isNear(speaker.id, listener.id));
         if (inEarshot) overhear(speaker.id, listener.id, null, line);
       });
       renderRoster();
@@ -1728,8 +1741,13 @@ async function playOpeningScene() {
     [vC.id, mate.id, 'recount-react'],
   ];
   // 장면이 진행되는 동안엔 배회 타이머를 늘려서, 대사 도중에 자리를 뜨지 않게 붙잡아 둔다.
-  const holdUntil = 1200 + steps.length * 2600;
-  [vA.id, vB.id, mate.id, vC.id].forEach(id => { const s = npcState[id]; if (s) s.timer = Math.max(s.timer || 0, holdUntil / 16.667); });
+  // mate 는 하우스메이트라 시각 전환(advanceHour)에도 붙잡아야 한다 — holdUntil(시각) 도 같이 세운다.
+  const sceneMs = 1200 + steps.length * 2600;
+  [vA.id, vB.id, mate.id, vC.id].forEach(id => {
+    const s = npcState[id]; if (!s) return;
+    s.timer = Math.max(s.timer || 0, sceneMs / 16.667);
+    s.holdUntil = Math.max(s.holdUntil || 0, Date.now() + sceneMs);
+  });
   walkPairTogether(vA.id, vB.id);
   walkPairTogether(mate.id, vC.id);
   await sleep(1200);

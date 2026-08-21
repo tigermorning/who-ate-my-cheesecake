@@ -467,7 +467,7 @@ export function topicOf(intent, text = '') {
 // freshToListener — gossipOnce() 의 `fresh` 값을 그대로 받는다.
 //   true  : 듣는 쪽이 처음 아는 것 → "알려주는" 말투 ("그거 알아? …")
 //   false : 듣는 쪽도 이미 아는 것, 출처만 새로 늘어난 것 → "이미 도는 얘기를 나누는" 말투 ("그 얘기 너도 들었어?")
-export function buildGossipMessages({ round, speakerId, listenerId, persona, fact, kind, freshToListener = true }) {
+export function buildGossipMessages({ round, speakerId, listenerId, persona, fact, kind, freshToListener = true, thought = false }) {
   if (round.playerId && speakerId === round.playerId) throw new Error('플레이어는 SAM 이 대신 말하지 않는다');
   const v = VOICE[speakerId] || { tone: '', shots: [], tendency: 'moderate' };
   const heard = kind === 'place';
@@ -482,35 +482,41 @@ export function buildGossipMessages({ round, speakerId, listenerId, persona, fac
   const sys = [
     `[너의 배역] ${nameOf(round, speakerId)} — ${persona?.occupation || ''} (SPUM Cast)`,
     ...personaLines(persona, v.tone),
-    relationLine(persona, listenerId, nameOf(round, listenerId)) || '',
+    thought ? '' : relationLine(persona, listenerId, nameOf(round, listenerId)) || '',
     '',
-    `[상황] ${nameOf(round, listenerId)}와(과) 마주쳤다. 아래 사실 하나를 자연스럽게 건넨다.`,
+    // thought === true: 상대가 자리를 뜨는 등, 말할 때가 되니 옆에 없어졌다 — 말을 거는 게
+    // 아니라 방금 떠오른 생각을 혼자 중얼거리는 것으로 프레이밍한다 (DIALOGUE_SYSTEM.md §8.5).
+    thought
+      ? `[상황] 옆에 아무도 없다. 아래 사실이 문득 떠올라 혼자 곱씹는다.`
+      : `[상황] ${nameOf(round, listenerId)}와(과) 마주쳤다. 아래 사실 하나를 자연스럽게 건넨다.`,
     `[전할 사실] ${fact}`,
     heard ? '[주의] 이건 네가 직접 본 게 아니라 전해 들은 이야기다. 반드시 출처를 밝혀 말한다.'
           : '[주의] 이건 네가 직접 겪거나 본 것이다.',
-    freshToListener
+    thought ? '' : (freshToListener
       ? '[주의] 상대는 이 얘기를 아직 모른다 — 처음 알려주는 것이다. "그거 알아?"처럼 새 소식을 꺼내듯 말한다.'
-      : '[주의] 상대도 이미 이 얘기를 알고 있다 — 새 소식이 아니라 이미 도는 이야기를 다시 나누는 것이다. "그 얘기 너도 들었지?"처럼 확인하듯 말한다.',
+      : '[주의] 상대도 이미 이 얘기를 알고 있다 — 새 소식이 아니라 이미 도는 이야기를 다시 나누는 것이다. "그 얘기 너도 들었지?"처럼 확인하듯 말한다.'),
     '',
     '[쓰는 법]',
     '· ' + gossipStyle,
     '· 한 문장. 길어도 두 문장.',
     '· 반드시 캐릭터의 직접 대사만 출력한다. 큰따옴표, 상황 해설("~에게 다가가며:"), 선택지("혹은 ~"), 부연설명 없이 캐릭터가 내뱉을 문장만 그대로 출력한다.',
     '· 시각·장소·사람 이름을 바꾸지 않는다. 없는 사실을 보태지 않는다.',
-    '· 상대 이름을 부르거나 말을 걸듯이. 보고서처럼 읽히면 실패다.',
+    thought
+      ? '· 상대를 부르거나 묻는 말투(-요?/-나요?/-지?/~잖아) 금지. "~라던데.", "~였다지." 처럼 혼자 중얼거리는 반말투로.'
+      : '· 상대 이름을 부르거나 말을 걸듯이. 보고서처럼 읽히면 실패다.',
     '· 네 말투 그대로. 같은 사실이라도 매번 다르게 말한다.',
-    '· 가끔은 사실만 전하고 끝내도 된다. 반드시 대화를 이어갈 필요는 없다.',
+    thought ? '' : '· 가끔은 사실만 전하고 끝내도 된다. 반드시 대화를 이어갈 필요는 없다.',
     '· 농담이나 가벼운 반응을 섞어도 된다. 너무 진지하지 마라.',
-  ].join('\n');
+  ].filter(Boolean).join('\n');
   return [{ role: 'system', content: sys },
-    { role: 'user', content: `${nameOf(round, listenerId)}에게 건넬 한마디 대사만 말해라.` }];
+    { role: 'user', content: thought ? '방금 떠오른 생각을 혼자 중얼거리는 한마디만 말해라.' : `${nameOf(round, listenerId)}에게 건넬 한마디 대사만 말해라.` }];
 }
 
 // ── 하우스메이트끼리 "범인이 누굴까" ─────────────────────────
 // 소문(buildGossipMessages)과 다르다 — 넘길 사실 한 조각이 없어도 된다.
 // 각자 아는 것(자기 자리·목격·전해 들은 것)을 근거 삼아 "짐작"을 나누는 열린 대화다.
 // 이건 게임의 정답이 아니다 — SAM 은 확정하지 않는다. 의심과 짐작만 말하게 한다 (DIALOGUE_SYSTEM.md §21).
-export function buildSuspectTalkMessages({ round, speakerId, listenerId, persona, mem }) {
+export function buildSuspectTalkMessages({ round, speakerId, listenerId, persona, mem, thought = false }) {
   if (round.playerId && speakerId === round.playerId) throw new Error('플레이어는 SAM 이 대신 말하지 않는다');
   const v = VOICE[speakerId] || { tone: '', shots: [], tendency: 'moderate' };
   const others = round.cast.filter(c => c.id !== speakerId).map(c => c.name).join(', ');
@@ -518,11 +524,13 @@ export function buildSuspectTalkMessages({ round, speakerId, listenerId, persona
   const sys = [
     `[너의 배역] ${nameOf(round, speakerId)} — ${persona?.occupation || ''} (SPUM Cast)`,
     ...personaLines(persona, v.tone),
-    relationLine(persona, listenerId, nameOf(round, listenerId)) || '',
+    thought ? '' : relationLine(persona, listenerId, nameOf(round, listenerId)) || '',
     '',
     factSheet(round, speakerId, null, mem),
     '',
-    `[상황] ${nameOf(round, listenerId)}와(과) 어젯밤 치즈케이크를 누가 먹었을지 잡담하듯 짐작을 나눈다.`,
+    thought
+      ? '[상황] 옆에 아무도 없다. 어젯밤 치즈케이크를 누가 먹었을지 문득 궁금해져 혼자 짐작해 본다.'
+      : `[상황] ${nameOf(round, listenerId)}와(과) 어젯밤 치즈케이크를 누가 먹었을지 잡담하듯 짐작을 나눈다.`,
     `[용의자들] ${others}`,
     '',
     '[쓰는 법]',
@@ -531,10 +539,12 @@ export function buildSuspectTalkMessages({ round, speakerId, listenerId, persona
     '· 한 문장. 길어도 두 문장.',
     '· 반드시 캐릭터의 직접 대사만 출력한다. 큰따옴표, 지문, 부연설명 없이 대사만 출력한다.',
     '· 네 말투 그대로. 매번 다르게 말한다.',
-    '· 상대를 지목하지 않은 채로 "모르겠다"고만 답해도 된다 — 늘 용의자를 대야 하는 건 아니다.',
-  ].join('\n');
+    thought
+      ? '· 상대를 부르거나 묻는 말투(-요?/-나요?/-지?) 금지. "~려나.", "~인 것 같기도 하고." 처럼 혼자 중얼거리는 반말투로.'
+      : '· 상대를 지목하지 않은 채로 "모르겠다"고만 답해도 된다 — 늘 용의자를 대야 하는 건 아니다.',
+  ].filter(Boolean).join('\n');
   return [{ role: 'system', content: sys },
-    { role: 'user', content: `${nameOf(round, listenerId)}에게 건넬 한마디 짐작만 말해라.` }];
+    { role: 'user', content: thought ? '문득 떠오른 짐작을 혼자 중얼거리는 한마디만 말해라.' : `${nameOf(round, listenerId)}에게 건넬 한마디 짐작만 말해라.` }];
 }
 
 // ── 대화를 끝내려는 말인지 ───────────────────────────────────
