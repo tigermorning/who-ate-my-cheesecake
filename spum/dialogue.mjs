@@ -172,13 +172,21 @@ export function factSheet(round, id, intent = null, mem = null) {
   const k = knowledgeOf(round, id);
   const act = intent?.act || 'UNKNOWN';
   const L = [];
+  // 여기서 말하는 대상은 늘 플레이어다(buildMessages 는 플레이어 아닌 상대에겐 안 쓰인다) —
+  // 목격·소문 속 인물이 플레이어 자신이면 이름을 3인칭으로 부르지 않고 "너"로 부른다.
+  // 안 그러면 "하루를 봤어"처럼, 지금 말을 거는 상대(하루)를 이름으로 부르는 문장이 나온다.
+  const isYou = pid => !!round.playerId && pid === round.playerId;
+  const who = pid => isYou(pid) ? '너' : nameOf(round, pid);
   L.push('[네가 아는 것 — 이 밖의 시각·장소·인물은 절대 말하지 않는다]');
   L.push('· 네 어젯밤 자리: ' + k.own.map(o => `${o.hour} ${o.room}`).join(' / '));
   if (k.seen.length) {
     if (act === 'ASK_SIGHTING' || act === 'ASK_ABOUT' || act === 'ASK_WHEREABOUTS' || act === 'FOLLOW_UP') {
-      L.push('· 네가 같은 방에서 본 것: ' + k.seen.map(s => `${s.hour} ${s.room}에서 ${nameOf(round, s.who)}`).join(' / '));
+      L.push('· 네가 같은 방에서 본 것: ' + k.seen.map(s => `${s.hour} ${s.room}에서 ${who(s.who)}`).join(' / '));
     } else {
-      L.push('· 네가 본 사람 (요약): ' + [...new Set(k.seen.map(s => nameOf(round, s.who)))].join(', '));
+      L.push('· 네가 본 사람 (요약): ' + [...new Set(k.seen.map(s => who(s.who)))].join(', '));
+    }
+    if (k.seen.some(s => isYou(s.who))) {
+      L.push('· 위에 "너"라고 적힌 건 지금 말을 거는 상대(플레이어) 본인이다. 이름으로 부르지 말고 "너"라고 하거나, "우리 같이 있었잖아"처럼 자연스럽게 말한다.');
     }
   } else {
     L.push('· 네가 본 것: 없다. 어젯밤 누구와도 같은 방에 있지 않았다.');
@@ -186,7 +194,7 @@ export function factSheet(round, id, intent = null, mem = null) {
   L.push('· 네가 가 보지 않은 방은 "모른다"고 답한다. "비어 있었다"고 말하면 안 된다.');
   L.push('· 네 방패(먹지 않았다는 근거): "' + k.shield.line + '" — 이 말은 ' + (k.shield.truthful ? '참이다.' : '거짓이다. 들키기 전까지는 밀고 나간다.'));
   if (k.knows.length) {
-    L.push('· 네가 알고 있는 남의 사정: ' + k.knows.map(c => `${nameOf(round, c.about)} — ${c.text}`).join(' / ') + ' (묻거든 말해도 된다)');
+    L.push('· 네가 알고 있는 남의 사정: ' + k.knows.map(c => `${who(c.about)} — ${c.text}`).join(' / ') + ' (묻거든 말해도 된다)');
   }
   // 살면서 전해 들은 것 — 반드시 출처를 달고 말한다
   factLines(round, mem).forEach(line => L.push(line));
@@ -200,7 +208,7 @@ export function factSheet(round, id, intent = null, mem = null) {
     if (round.accomplice) L.push('· ' + nameOf(round, round.accomplice) + '이(가) 너를 감싸 주기로 했다. 그 이야기를 먼저 꺼내지 않는다.');
   }
   if (k.isAccomplice && k.planted) {
-    L.push('· 너는 부탁을 받고 거짓 목격 하나를 말해 주기로 했다: "' + k.planted.hour + '에 ' + k.planted.room + '에서 ' + nameOf(round, k.planted.who) + '을(를) 봤다".');
+    L.push('· 너는 부탁을 받고 거짓 목격 하나를 말해 주기로 했다: "' + k.planted.hour + '에 ' + k.planted.room + '에서 ' + who(k.planted.who) + '을(를) 봤다".');
     L.push('· 이 거짓말은 네 진짜 자리와 어긋난다. 그 점을 짚이면 당황하되, 곧바로 다 불지는 않는다. 두 번 짚이면 털어놓는다.');
     L.push('· 누가 시켰는지는 마지막까지 아낀다.');
   }
@@ -301,6 +309,8 @@ export function buildMessages({ round, id, world, history = [], userText, mood =
       ? `· 이번이 이 대화의 첫 마디다. 반드시 "${playerCard.name}아/야" 식으로 상대 이름을 자연스러운 호칭(받침에 맞는 "아"나 "야")으로 불러 시작한다. 그 뒤로는 이 대화가 끝날 때까지 다시 이름을 부르지 않는다.`
       : '· 이미 대화가 이어지는 중이다. 상대 이름을 다시 부르지 않는다.',
     '· ' + actHint,
+    '· 목격·소문 속에 지금 말을 거는 상대(플레이어) 자신이 나오면 그 사람 이름을 부르지 않는다 — '
+      + '"' + (playerCard?.name || '') + '를 봤어" 처럼 눈앞의 사람을 이름으로 부르지 말고, "너" 또는 "우리 같이 있었잖아"처럼 직접 부른다.',
     '· 응답 길이: ' + responseGuide,
     '· 문장 자체도 짧게 끊는다 — 여러 명이 한꺼번에 떠드는 화면이라 긴 문장은 묻힌다.',
     '· 반드시 캐릭터의 직접 대사만 출력한다. 따옴표, 지문, 해설, 선택지 없이 말할 내용만 바로 출력한다.',
@@ -320,6 +330,74 @@ export function buildMessages({ round, id, world, history = [], userText, mood =
   return [{ role: 'system', content: sys },
     ...history.map(h => ({ role: h.who === 'player' ? 'user' : 'assistant', content: h.text })),
     { role: 'user', content: userText }];
+}
+
+// ── 동네 사람 대화 ────────────────────────────────────────────
+// 동네 사람은 사건 당일 밤 그 집에 없었다 — round.paths 에 자리가 없어 knowledgeOf() 를 못 쓴다.
+// 아는 것은 마주쳐 들은 소문(memory.mjs 의 place/clue)뿐이다. factSheet() 대신 이걸 쓴다.
+export function buildVillagerMessages({ round, id, world, history = [], userText, persona = null, mem = null, playerCard = null, sessionOpening = false }) {
+  const v = VOICE[id] || { tone: '', shots: [], tendency: 'moderate' };
+  const responseGuide = RESPONSE_LENGTH_GUIDE[v.tendency] || RESPONSE_LENGTH_GUIDE.moderate;
+  const heard = factLines(round, mem);
+  const recentHistory = history.slice(-6);
+  const contextSummary = recentHistory.length > 0
+    ? `[최근 대화 맥락]\n${recentHistory.map(h => `${h.who === 'player' ? '플레이어' : nameOf(round, id)}: ${h.text}`).join('\n')}\n이전 대화를 이어가되, 반복하지 말고 자연스럽게 받아라.`
+    : '';
+  const sys = [
+    world.join('\n'),
+    '',
+    `[너의 배역] ${nameOf(round, id)} — ${persona?.occupation || ''} (동네 사람, SPUM Cast)`,
+    ...personaLines(persona, v.tone),
+    '말투 예문 (그대로 베끼지 말고 결만 따른다):',
+    ...v.shots.map(s => '  · ' + s),
+    '',
+    '[네가 아는 것]',
+    '· 너는 사건이 있던 날 밤 그 집에 없었다. 누가 케이크를 먹었는지, 누가 몇 시에 어디 있었는지 직접 본 게 없다.',
+    heard.length ? heard.join('\n') : '· 아직 아무 소문도 못 들었다. 모르면 "그건 잘 모르겠다"고 솔직히 답한다.',
+    '· 모르는 시각·장소·사람은 절대 지어내지 않는다. 모르면 모른다고 한다.',
+    '',
+    ...playerCardLines(playerCard),
+    relationLine(persona, playerCard?.id, playerCard?.name) || '',
+    '',
+    contextSummary,
+    '',
+    '[대답하는 법]',
+    sessionOpening && playerCard?.name
+      ? `· 이번이 이 대화의 첫 마디다. 반드시 "${playerCard.name}아/야" 식으로 상대 이름을 자연스러운 호칭으로 불러 시작한다.`
+      : '· 이미 대화가 이어지는 중이다. 상대 이름을 다시 부르지 않는다.',
+    '· 들은 소문 속에 지금 말을 거는 상대(플레이어) 자신이 나오면 이름을 부르지 않는다 — "너"라고 직접 부른다.',
+    '· 응답 길이: ' + responseGuide,
+    '· 반드시 캐릭터의 직접 대사만 출력한다. 따옴표, 지문, 해설 없이 말할 내용만 바로 출력한다.',
+    '· 남에게 전해 들은 이야기는 반드시 출처를 밝히고 말한다. 직접 본 것처럼 말하지 않는다.',
+    '· 사건과 무관한 잡담(동네 이야기, 장사, 날씨 등)도 자연스럽게 받는다.',
+  ].filter(Boolean).join('\n');
+  return [{ role: 'system', content: sys },
+    ...history.map(h => ({ role: h.who === 'player' ? 'user' : 'assistant', content: h.text })),
+    { role: 'user', content: userText }];
+}
+
+// 동네 사람용 violations() — knowledgeOf(round,id) 는 round.paths 에 동네 사람 자리가 없어 못 쓴다.
+// 승인 범위를 「마주쳐 들은 것」으로만 좁힌 버전.
+export function villagerViolations(round, mem, text) {
+  const ok = new Set(heardPairs(mem).pairs);
+  const hits = [];
+  for (const sent of text.split(/[.!?\n]/)) {
+    const hs = [...new Set(HOURS.filter(h => sent.includes(h)))]
+      .map(h => ({ h, i: sent.indexOf(h) }))
+      .sort((a, b) => a.i - b.i);
+    for (let idx = 0; idx < hs.length; idx++) {
+      const start = hs[idx].i;
+      const end = idx + 1 < hs.length ? hs[idx + 1].i : sent.length;
+      const room = ROOMS.find(r => sent.slice(start, end).includes(r));
+      if (room && !ok.has(hs[idx].h + '|' + room)) {
+        hits.push({ kind: 'pair', hour: hs[idx].h, room, sent: sent.trim().slice(0, 40) });
+      }
+    }
+  }
+  const allowedNames = heardNames(round, mem);
+  const sawNames = round.cast.filter(c => text.includes(c.name) && /봤|보였|있었/.test(text)).map(c => c.name);
+  sawNames.forEach(n => { if (!allowedNames.has(n)) hits.push({ kind: 'person', who: n }); });
+  return { ok: hits.length === 0, hits, hoursIn: HOURS.filter(h => text.includes(h)), roomsIn: ROOMS.filter(r => text.includes(r)) };
 }
 
 // ── 검증 ────────────────────────────────────────────────────

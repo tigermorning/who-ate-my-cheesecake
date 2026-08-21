@@ -155,29 +155,35 @@ export function gossipLine(round, g) {
 
 // ── 프롬프트에 얹을 줄 ──────────────────────────────────────
 // 전해 들은 것은 반드시 출처를 밝히게 한다. 이게 「자연스러운 정보 공유」의 핵심이다.
+// factLines() 는 항상 플레이어에게 직접 말을 거는 프롬프트에만 쓰인다(dialogue.mjs 의
+// buildMessages·buildVillagerMessages). NPC 끼리 나누는 소문은 이 함수를 안 쓴다 — 그래서
+// 언급 대상이 플레이어 자신이면 이름을 3인칭으로 부르지 않고 "너"로 직접 지칭한다.
+// 안 그러면 "하루를 봤어" 처럼, 눈앞의 사람(하루)을 이름으로 부르는 어색한 문장이 나온다.
 export function factLines(round, mem) {
   if (!mem) return [];
   const L = [];
   const heardPlaces = mem.items.filter(e => e.k === 'place');
   const heardClues = mem.items.filter(e => e.k === 'clue' && e.from.length);
   const asked = mem.items.filter(e => e.k === 'asked');
+  const isPlayer = id => !!round.playerId && id === round.playerId;
   if (heardPlaces.length) {
-    L.push('· 남에게 전해 들은 자리 (말할 때 반드시 "누구한테 들었는데"를 붙인다):');
+    L.push('· 남에게 전해 들은 자리 (말할 때 반드시 "누구한테 들었는데"를 붙인다. 대상이 지금 말을 거는 상대(너) 자신이면 이름 대신 "너"라고 한다):');
     heardPlaces.slice(-6).forEach(e => {
-      const subject = nameOf(round, e.who);
+      const you = isPlayer(e.who);
+      const subject = you ? '너' : nameOf(round, e.who);
       L.push(e.from.length === 1 && e.from[0] === subject
         ? `   - ${subject} 본인이 ${e.hour}엔 ${e.room}에 있었다고 했다`
-        : `   - ${e.from.join('·')} 말로는, ${subject}가 ${e.hour}에 ${e.room}에 있었다고 한다`);
+        : `   - ${e.from.join('·')} 말로는, ${you ? '네가' : subject + '가'} ${e.hour}에 ${e.room}에 있었다고 한다`);
     });
     L.push('   ※ 전해 들은 것은 네가 본 것이 아니다. "봤다"고 말하면 안 된다.');
   }
   if (heardClues.length) {
     L.push('· 전해 들은 남의 사정: ' + heardClues.slice(-4)
-      .map(e => `${nameOf(round, e.about)} — ${e.text} (${e.from.join('·')}한테 들음)`).join(' / '));
+      .map(e => `${isPlayer(e.about) ? '너' : nameOf(round, e.about)} — ${e.text} (${e.from.join('·')}한테 들음)`).join(' / '));
   }
   if (asked.length) {
-    L.push('· 집 안에 도는 이야기: ' + playerName(round) + '가 ' + [...new Set(asked.map(e => `"${e.topic}"`))].slice(-3).join(', ')
-      + ' 를(을) 캐고 다닌다. 물어보면 그런 얘기를 들었다고 해도 된다.');
+    L.push('· 집 안에 도는 이야기: 네가 ' + [...new Set(asked.map(e => `"${e.topic}"`))].slice(-3).join(', ')
+      + ' 를(을) 캐고 다닌다는 얘기가 돈다. 물어보면 그런 얘기를 들었다고 해도 된다.');
   }
   return L;
 }

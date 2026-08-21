@@ -216,7 +216,7 @@ dialog::backdrop{background:rgba(60,40,25,.45)}
 
 <script type="module">
 import { makeRound, knowledgeOf, nameOf, ROOMS, HOURS, CAST, VILLAGERS } from './round.mjs';
-import { buildMessages, buildGossipMessages, buildSuspectTalkMessages, buildGreetingMessages, buildChaseMessages, buildIncidentGossipMessages, buildRecountMessages, isFarewell, violations, classifyIntent, topicOf, MODEL, VOICE } from './dialogue.mjs';
+import { buildMessages, buildVillagerMessages, buildGossipMessages, buildSuspectTalkMessages, buildGreetingMessages, buildChaseMessages, buildIncidentGossipMessages, buildRecountMessages, isFarewell, violations, villagerViolations, classifyIntent, topicOf, MODEL, VOICE } from './dialogue.mjs';
 import { createMemory, createBlankMemory, gossipOnce, gossipLine, noteAsked, memorySize, heardCount } from './memory.mjs';
 // 맵(supermarket-map.json)이 크기·자리·방을 정본으로 들고 있다 — SPUM Studio "Cozy Supermarket" 월드에서 그대로 뽑는다.
 // 여기 자리는 spawnPoints 를 못 찾았을 때만 쓰는 시드값이다 (Studio 월드 좌표를 그대로 넣어 뒀다).
@@ -462,6 +462,7 @@ const NPCS = () => CAST.filter(c => c.id !== PLAYER_ID);
 // 동네 사람은 용의자도 목격자도 아니다 — round.paths 밖이라 심문(NPCS) 대상엔 안 넣는다.
 // 화면에서 걷고 서로 소문을 나누는 것만 한다.
 const WANDERERS = () => [...NPCS(), ...VILLAGERS];
+const isVillager = id => VILLAGERS.some(v => v.id === id);
 const ALL_VISIBLE = () => [...WANDERERS(), CAST.find(c => c.id === PLAYER_ID)].filter(Boolean);
 const playerGrid = { x: 0, y: 0 };
 const playerPx = { x: 0, y: 0 };
@@ -583,17 +584,39 @@ function updatePlayer(dt) {
 }
 
 // ── NPC 이동 ────────────────────────────────────────────────
+// 예전엔 한 칸만 옮기고 60~150프레임(1~2.5초)씩 멈춰서, 한 방에 여럿이 있으면
+// 그냥 제자리서 꼼지락거리는 것처럼 보였다 — 대화 속도(가독성)는 안 건드리고
+// 걷는 거리만 늘려 실제로 돌아다니는 것처럼 보이게 한다.
+const WANDER_MIN_STEP = 2, WANDER_MAX_STEP = 5;
 function npcWander(id) {
   const s = npcState[id]; if (s.moving) return;
   s.timer--;
   if (s.timer > 0) return;
-  s.timer = Math.random() * 90 + 60;
+  s.timer = Math.random() * 60 + 30;
   if (seekPartner(id)) return;   // 대화 상대를 찾았으면 무작위 배회 대신 그쪽으로 걷는다
-  const dirs = [[0,-1],[0,1],[-1,0],[1,0]];
-  const candidates = dirs.map(d => ({ x: s.gx + d[0], y: s.gy + d[1] })).filter(p => isWalkable(p.x, p.y));
-  if (!candidates.length) return;
-  const pick2 = candidates[Math.floor(Math.random() * candidates.length)];
-  s.tx = pick2.x; s.ty = pick2.y; s.path = [{ x: pick2.x, y: pick2.y }]; s.step = 0; s.moving = true;
+  const room = roomOf(s.gx, s.gy);
+  // 지금 있는 사람들과 겹치지 않는 자리를 우선한다 — 안 그러면 방 하나에 다들 뭉쳐 있게 된다.
+  const others = WANDERERS().filter(c => c.id !== id).map(c => npcState[c.id]).filter(Boolean);
+  let best = null, bestCrowd = -Infinity;
+  for (let tries = 0; tries < 8; tries++) {
+    const ang = Math.random() * Math.PI * 2;
+    const dist = WANDER_MIN_STEP + Math.floor(Math.random() * (WANDER_MAX_STEP - WANDER_MIN_STEP + 1));
+    const tx = Math.round(s.gx + Math.cos(ang) * dist), ty = Math.round(s.gy + Math.sin(ang) * dist);
+    if (!isWalkable(tx, ty)) continue;
+    // 방을 벗어나지 않는다 — 시각별 목격 배치(round.paths)와 어긋나면 안 되니, 방 안에서만 돌아다닌다.
+    if (room && roomOf(tx, ty) !== room) continue;
+    const crowd = others.reduce((min, o) => Math.min(min, Math.hypot(o.gx - tx, o.gy - ty)), Infinity);
+    if (crowd > bestCrowd) { bestCrowd = crowd; best = { x: tx, y: ty }; }
+  }
+  if (!best) {   // 방 안에서 멀리 갈 자리를 못 찾으면(방이 좁다) 예전처럼 한 칸이라도 옮긴다
+    const dirs = [[0,-1],[0,1],[-1,0],[1,0]];
+    const candidates = dirs.map(d => ({ x: s.gx + d[0], y: s.gy + d[1] })).filter(p => isWalkable(p.x, p.y));
+    if (!candidates.length) return;
+    best = candidates[Math.floor(Math.random() * candidates.length)];
+  }
+  const path = findPath(s.gx, s.gy, best.x, best.y);
+  if (!path || !path.length) return;
+  s.tx = best.x; s.ty = best.y; s.path = path; s.step = 0; s.moving = true;
 }
 function sendNPCtoRoom(id, roomName) {
   const s = npcState[id];
@@ -679,7 +702,7 @@ function updateNPCs(dt) {
 // ── 근접 감지 ───────────────────────────────────────────────
 const PROXIMITY = 2;
 const LANDMARK_PROXIMITY = 2.2;
-let nearestNPC = null, nearestLandmark = null, proximityPulse = 0;
+let nearestNPC = null, nearestVillager = null, nearestPerson = null, nearestLandmark = null, proximityPulse = 0;
 // 다가가면 짧게 반응한다 — 대화(talks) 예산은 안 쓴다, 말풍선뿐이다.
 let prevNearNPC = null;
 const GREET_COOLDOWN = 30000;   // 같은 사람에게 자꾸 들락날락해도 30초 안엔 다시 안 반응한다
@@ -771,6 +794,7 @@ function checkWalkAway() {
 function updateProximity() {
   checkWalkAway();
   nearestNPC = null; let minD = Infinity;
+  nearestVillager = null; let minVD = Infinity;
   NPCS().forEach(c => {
     const s = npcState[c.id]; if (!s) return;
     const nx = s.moving ? s.px / TS : s.gx;
@@ -778,9 +802,20 @@ function updateProximity() {
     const d = Math.min(Math.hypot(s.gx - playerGrid.x, s.gy - playerGrid.y), Math.hypot(nx - playerGrid.x, ny - playerGrid.y));
     if (d < PROXIMITY && d < minD) { minD = d; nearestNPC = c.id; }
   });
-  if (nearestNPC && nearestNPC !== prevNearNPC && !chatOpen()) triggerGreeting(nearestNPC);
-  prevNearNPC = nearestNPC;
-  if (nearestNPC && !cur) { cur = nearestNPC; renderRoster(); renderLog(); }
+  // 동네 사람도 말을 걸 수 있다 — round.paths 에 자리가 없어 심문 지식(knowledgeOf)은 못 쓰지만,
+  // 마주쳐 들은 소문만으로 대화하는 별도 경로(buildVillagerMessages)가 있다. ask()/template() 참고.
+  VILLAGERS.forEach(c => {
+    const s = npcState[c.id]; if (!s) return;
+    const nx = s.moving ? s.px / TS : s.gx;
+    const ny = s.moving ? s.py / TS : s.gy;
+    const d = Math.min(Math.hypot(s.gx - playerGrid.x, s.gy - playerGrid.y), Math.hypot(nx - playerGrid.x, ny - playerGrid.y));
+    if (d < PROXIMITY && d < minVD) { minVD = d; nearestVillager = c.id; }
+  });
+  // 하우스메이트와 동네 사람이 동시에 사거리 안이면 실제로 더 가까운 쪽을 대상으로 삼는다.
+  nearestPerson = (nearestVillager && minVD < minD) ? nearestVillager : nearestNPC;
+  if (nearestPerson && nearestPerson !== prevNearNPC && !chatOpen()) triggerGreeting(nearestPerson);
+  prevNearNPC = nearestPerson;
+  if (nearestPerson && !cur) { cur = nearestPerson; renderRoster(); renderLog(); }
 
   nearestLandmark = null; let minLd = Infinity;
   const lms = spumMap?.landmarks || [];
@@ -978,7 +1013,7 @@ window.addEventListener('keydown', e => {
 
   if (DIR_BY_CODE[e.code]) { e.preventDefault(); heldDirs.add(e.code); tryStepPlayer(); }
   if (e.key === 'e' || e.key === 'E') {
-    if (nearestNPC) { cur = nearestNPC; renderRoster(); renderLog(); openChat(); }
+    if (nearestPerson) { cur = nearestPerson; renderRoster(); renderLog(); openChat(); }
     else if (nearestLandmark) { inspectLandmark(nearestLandmark); }
   }
   // Space — 대화창이 닫혀 있으면 가까운 NPC 와 시작, 열려 있으면 입력칸으로 돌아간다
@@ -987,7 +1022,7 @@ window.addEventListener('keydown', e => {
     if (chatOpen()) $('#say')?.focus();
     else {
       // 옆에 사람이 있으면 그 사람과, 없으면 마지막으로 이야기하던 상대와 이어간다
-      const who = nearestNPC || cur;
+      const who = nearestPerson || cur;
       if (who) { cur = who; renderRoster(); renderLog(); openChat(); }
       else if (nearestLandmark) { inspectLandmark(nearestLandmark); }
     }
@@ -1098,7 +1133,7 @@ function drawOverlay() {
       cx.fillStyle = '#fff'; cx.fillText(label, px + TS / 2, py + TS + 16);
       return;
     }
-    if (nearestNPC === c.id && cur !== c.id) {
+    if (nearestPerson === c.id && cur !== c.id) {
       const pulse = 0.5 + 0.5 * Math.sin(proximityPulse);
       cx.strokeStyle = `rgba(123,178,106,${0.4 + pulse * 0.4})`;
       cx.lineWidth = 2.5; cx.setLineDash([4, 4]);
@@ -1136,7 +1171,7 @@ function drawOverlay() {
       lines.forEach((l, i) => cx.fillText(l, px + TS / 2, by + 20 + i * 17));
     }
   });
-  if (nearestLandmark && !nearestNPC) {
+  if (nearestLandmark && !nearestPerson) {
     const lx = nearestLandmark.x * TS + TS / 2, ly = nearestLandmark.y * TS;
     const pulse = 0.5 + 0.5 * Math.sin(proximityPulse);
     cx.font = '700 12px "Pretendard",system-ui'; cx.textAlign = 'center';
@@ -1153,8 +1188,9 @@ function sceneClick(ev) {
   const x = (ev.clientX - r.left) / r.width * cv.width / TS;
   const y = (ev.clientY - r.top) / r.height * cv.height / TS;
   let best = null, bd = 3;
-  NPCS().forEach(c => {
-    const s = SPOT[c.id]; const d = Math.hypot(s.x + .5 - x, s.y + .5 - y);
+  WANDERERS().forEach(c => {
+    const s = SPOT[c.id]; if (!s) return;
+    const d = Math.hypot(s.x + .5 - x, s.y + .5 - y);
     if (d < bd) { bd = d; best = c.id; }
   });
   if (best) { cur = best; renderRoster(); renderLog(); openChat(); }
@@ -1290,8 +1326,13 @@ function harvest(speaker, text, askedHour = null) {
     const body = sent.replace(VOCATIVE_RE, '');
     // "미누랑 피치 봤어" 처럼 한 문장에 여럿을 봤다고 할 수 있다 — 첫 명만 잡으면 나머지가 증언판에서 빠진다.
     const others = CAST.filter(c => c.id !== speaker && body.includes(c.name));
-    if (others.length) others.forEach(o => record(o.id, h, r, 'seen', nameOf(round, speaker)));
-    else if (speaker !== 'player') record(speaker, h, r, 'own');
+    others.forEach(o => record(o.id, h, r, 'seen', nameOf(round, speaker)));
+    // NPC 는 플레이어를 이름이 아니라 "너"로 직접 부른다(§ 플레이어 직접 지칭 규칙) — 그렇다고
+    // "너를 봤어" 같은 목격이 증언판에서 통째로 빠지면 안 되니 이것도 따로 잡는다.
+    const mentionsYou = speaker !== 'player' && PLAYER_ID
+      && /(?:^|[^가-힣])너(?:는|를|랑|한테|가)?(?:[^가-힣]|$)/.test(body);
+    if (mentionsYou) record(PLAYER_ID, h, r, 'seen', nameOf(round, speaker));
+    if (!others.length && !mentionsYou && speaker !== 'player') record(speaker, h, r, 'own');
     t.hour = h; t.room = r; lastHour = h;
   };
   for (const sent of String(text).split(/[.!?\n]/)) {
@@ -1316,6 +1357,9 @@ function harvest(speaker, text, askedHour = null) {
       });
     } else if (lastHour) {
       rs.forEach(({ r }) => put(lastHour, r, sent));
+    } else if (speaker !== 'player' && round && isVillager(speaker)) {
+      // 동네 사람은 round.paths(그날 밤 자리)가 없다 — knowledgeOf() 를 못 쓰니 지금 시각으로 둔다.
+      rs.forEach(({ r }) => put(HOURS[currentHourIndex], r, sent));
     } else if (speaker !== 'player' && round) {
       const k = knowledgeOf(round, speaker);
       rs.forEach(({ r }) => {
@@ -1352,8 +1396,12 @@ async function ask(id, userText) {
   noteAsked(round, mem, topicOf(intent, userText));
   const sessionOpening = needsGreeting[id] !== false;
   needsGreeting[id] = false;
-  const msgs = buildMessages({ round, id, world, history: chat[id].slice(-8), userText, intent, mem,
-    persona: castPersona[id], playerCard: playerCardOf(), sessionOpening });
+  const villager = isVillager(id);
+  const msgs = villager
+    ? buildVillagerMessages({ round, id, world, history: chat[id].slice(-8), userText, mem,
+        persona: castPersona[id], playerCard: playerCardOf(), sessionOpening })
+    : buildMessages({ round, id, world, history: chat[id].slice(-8), userText, intent, mem,
+        persona: castPersona[id], playerCard: playerCardOf(), sessionOpening });
   if (!llmReady) return template(id, userText, sessionOpening);
   try {
     const r = await fetch('/api/sam/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1361,7 +1409,7 @@ async function ask(id, userText) {
     const j = await r.json();
     let text = j.choices?.[0]?.message?.content || j.output?.content || '';
     text = String(text).trim();
-    const v = violations(round, id, text, mem);
+    const v = villager ? villagerViolations(round, mem, text) : violations(round, id, text, mem);
     if (!v.ok) {
       const retry = await fetch('/api/sam/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model: MODEL.normal, temperature: 0.6, max_tokens: 120,
@@ -1384,7 +1432,16 @@ function vocative(name) {
   if (last < 0 || last > 11171) return name;
   return name + (last % 28 !== 0 ? '아' : '야');
 }
+// 동네 사람은 round.paths(현장 자리)가 없다 — SAM 없이(template) 대답할 땐 들은 소문(mem)만 쓴다.
+function villagerTemplate(id, q, sessionOpening) {
+  const lead = sessionOpening ? vocative(playerCardOf().name) + ', ' : '';
+  if (/먹었|케이크/.test(q)) return `${lead}그건 나도 몰라. 난 그날 밤 그 집에 없었잖아.`;
+  const heard = (memories[id]?.items || []).filter(e => e.k === 'place').slice(-1)[0];
+  if (heard) return `${lead}${heard.from[0]} 말로는, ${nameOf(round, heard.who)}가 ${heard.hour}에 ${heard.room}에 있었다던데.`;
+  return `${lead}음… 그건 잘 모르겠어. 아직 아무 얘기도 못 들었어.`;
+}
 function template(id, q, sessionOpening) {
+  if (isVillager(id)) return villagerTemplate(id, q, sessionOpening);
   const k = knowledgeOf(round, id);
   const lead = sessionOpening ? vocative(playerCardOf().name) + ', ' : '';
   if (/먹었|케이크/.test(q)) return `${lead}아니. 안 먹었어. ${k.shield.line}.`;
@@ -1719,7 +1776,7 @@ function toggleBoard() {
   const t = el('button', null, '💬 대화'); t.id = 'chatToggle';
   // 그냥 openChat() 만 부르면 cur 를 안 건드려서, 다른 NPC 에게 걸어간 뒤 이 버튼을 누르면
   // 예전 상대와의 대화가 그대로 다시 열린다 — 옆에 사람이 있으면 그쪽으로 바꾼다(Space 키와 같은 규칙).
-  t.onclick = () => { if (nearestNPC) { cur = nearestNPC; renderRoster(); renderLog(); } openChat(); };
+  t.onclick = () => { if (nearestPerson) { cur = nearestPerson; renderRoster(); renderLog(); } openChat(); };
   stage.append(t);
 })();
 
