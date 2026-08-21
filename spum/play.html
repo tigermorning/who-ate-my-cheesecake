@@ -598,7 +598,7 @@ function npcWander(id) {
   // 지금 있는 사람들과 겹치지 않는 자리를 우선한다 — 안 그러면 방 하나에 다들 뭉쳐 있게 된다.
   const others = WANDERERS().filter(c => c.id !== id).map(c => npcState[c.id]).filter(Boolean);
   let best = null, bestCrowd = -Infinity;
-  for (let tries = 0; tries < 8; tries++) {
+  for (let tries = 0; tries < 14; tries++) {
     const ang = Math.random() * Math.PI * 2;
     const dist = WANDER_MIN_STEP + Math.floor(Math.random() * (WANDER_MAX_STEP - WANDER_MIN_STEP + 1));
     const tx = Math.round(s.gx + Math.cos(ang) * dist), ty = Math.round(s.gy + Math.sin(ang) * dist);
@@ -1117,6 +1117,11 @@ function drawOverlay() {
   // ① 머리 위를 덮는 층을 먼저 얹는다 — 캐릭터가 나무·차양 뒤로 들어간다
   if (frontLayer) cx.drawImage(frontLayer, 0, 0, frontLayer.width, frontLayer.height, 0, 0, cv.width, cv.height);
   cx.font = '800 14px "Pretendard",system-ui'; cx.textAlign = 'center';
+  // 말풍선 겹침 방지 — NPC 들이 대화하려면 서로 가까이 붙어야 하니(GOSSIP_RANGE),
+  // 캐릭터 간격만으론 안 겹치게 못 만든다. 이번 프레임에 그려질 말풍선 사각형을
+  // 모아뒀다가, 새 말풍선이 이미 놓인 것과 겹치면 그 위로 밀어 올려 쌓는다.
+  const placedBubbleRects = [];
+  const rectsOverlap = (a, b) => !(a.x + a.w < b.x || b.x + b.w < a.x || a.y + a.h < b.y || b.y + b.h < a.y);
   ALL_VISIBLE().forEach(c => {
     const s = SPOT[c.id]; if (!s) return;
     const isMe = c.id === PLAYER_ID;
@@ -1139,10 +1144,11 @@ function drawOverlay() {
       cx.lineWidth = 2.5; cx.setLineDash([4, 4]);
       cx.strokeRect(px - 12, py - 28, TS + 24, TS + 36);
       cx.setLineDash([]);
-      cx.font = '700 10px "Pretendard",system-ui'; cx.textAlign = 'center';
+      cx.font = '700 10px "Pretendard",system-ui';
       cx.fillStyle = `rgba(123,178,106,${0.6 + pulse * 0.3})`;
       cx.fillText('대화 [E]', px + TS / 2, py - 30);
-      cx.textAlign = 'left';
+      // textAlign 은 'center' 로 되돌리지 않는다 — 여기서 'left' 로 리셋하면 바로 아래
+      // 말풍선(중앙 정렬로 폭을 계산)이 왼쪽 정렬로 그려져 상자 오른쪽 밖으로 삐져나간다.
     }
     if (cur === c.id) { cx.strokeStyle = '#FFB86B'; cx.lineWidth = 2; cx.strokeRect(px - 10, py - 26, TS + 20, TS + 32); }
     // 이름은 SPUM BubbleRenderer 가 캐릭터 위에 이미 그린다 — 여기서 또 그리지 않는다.
@@ -1152,8 +1158,20 @@ function drawOverlay() {
       // 생각(thought)은 상대가 옆에 없을 때다 — 대화 말풍선과 헷갈리면 안 되니 모양을 다르게 그린다.
       cx.font = (bub.thought ? 'italic ' : '') + '600 13px "Pretendard",system-ui';
       const lines = wrapBubbleText(cx, bub.text, 190);
-      const bw = Math.min(190, Math.max(...lines.map(l => cx.measureText(l).width))) + 16, bh = lines.length * 17 + 10;
-      const bx = px + TS / 2 - bw / 2, by = py - 10 - bh;
+      // 190 으로 다시 min 잡지 않는다 — 한 글자가 190 을 넘는 극단적 경우(긴 URL 등)에
+      // 상자를 글자보다 좁게 그려서 글자가 상자 밖으로 삐져나오던 원인이었다.
+      const bw = Math.max(...lines.map(l => cx.measureText(l).width)) + 16, bh = lines.length * 17 + 10;
+      const bx = px + TS / 2 - bw / 2;
+      let by = py - 10 - bh;
+      // 이미 놓인 말풍선과 겹치면, 안 겹칠 때까지 그 위로 쌓아 올린다.
+      for (let guard = 0; guard < 24; guard++) {
+        const rect = { x: bx, y: by, w: bw, h: bh };
+        const hit = placedBubbleRects.find(r => rectsOverlap(rect, r));
+        if (!hit) break;
+        by = hit.y - bh - 6;
+      }
+      by = Math.max(4, by);   // 화면 위로 완전히 밀려나가진 않게 최소 여백만 보장
+      placedBubbleRects.push({ x: bx, y: by, w: bw, h: bh });
       if (bub.thought) {
         // 대화 말풍선(밝은 크림색)과 한눈에 구별되게 — 검은 바탕에 흰 글씨, 보라 테두리
         cx.fillStyle = 'rgba(18,16,26,.88)'; cx.strokeStyle = 'rgba(168,140,255,.9)'; cx.lineWidth = 2;
@@ -1631,16 +1649,15 @@ async function pickPlayer() {
 // 이건 증언판에는 안 올라간다(harvest 를 거치지 않는다) — 뜬소문·요약일 뿐, 확정된 진술이 아니다.
 const OPENING_REACT_FALLBACKS = ['헐, 진짜요?', '어머, 세상에.', '그래서 누가 그랬는지는 나왔대요?', '아이고, 큰일이었네요.'];
 async function runOpeningLine(speakerId, listenerId, kind) {
-  // 이건 각자 정해진 스폰 위치에 서 있는 각본 장면이라, 둘이 실제로 타일 몇 칸 안에
-  // 붙어 있는지는 안 본다 — isNear() 로 걸렀더니 스폰 좌표가 늘 멀어서 4줄 전부
-  // "혼잣말"로 새고 진짜 소문 주고받는 장면이 한 번도 안 나왔었다. 다가가야만 말이
-  // 트이는 건 updateGossip() 의 배회 소문 쪽 얘기고, 여긴 개장 컷신이라 늘 대화로 친다.
   let fallback, msgs = null;
   if (kind === 'gossip-raise') { fallback = '그런 일 있었다며?'; msgs = buildIncidentGossipMessages({ round, speakerId, listenerId, persona: castPersona[speakerId], role: 'raise' }); }
   else if (kind === 'gossip-react') { fallback = '어, 나도 그 얘기 들었어.'; msgs = buildIncidentGossipMessages({ round, speakerId, listenerId, persona: castPersona[speakerId], role: 'react' }); }
   else if (kind === 'recount') { fallback = '아니 어제 우리 집에서 말이죠, 케이크가 없어졌지 뭐예요.'; msgs = buildRecountMessages({ round, speakerId, listenerId, persona: castPersona[speakerId] }); }
   else { fallback = OPENING_REACT_FALLBACKS[Math.floor(Math.random() * OPENING_REACT_FALLBACKS.length)]; }
-  setBubble(speakerId, fallback);   // SAM 이 짓는 동안에도 말풍선은 바로 뜬다
+  // waitUntilNear() 가 시간 초과로 포기했을 수 있다 — 그럴 땐 청자가 실제로 옆에 없는
+  // 채로 말하는 셈이니, 대화 말풍선이 아니라 혼잣말(생각 풍선)로 그린다 (DIALOGUE_SYSTEM.md §8.5).
+  const thought = !isNear(speakerId, listenerId);
+  setBubble(speakerId, fallback, thought);   // SAM 이 짓는 동안에도 말풍선은 바로 뜬다
   let line = fallback;
   if (msgs && llmReady) {
     try {
@@ -1653,16 +1670,46 @@ async function runOpeningLine(speakerId, listenerId, kind) {
       }
     } catch { /* 기본 대사로 넘어간다 */ }
   }
-  setBubble(speakerId, line);
+  setBubble(speakerId, line, thought);
   sysLine('(' + nameOf(round, speakerId) + ') ' + line);   // 로그에는 최종 대사 한 줄만 남긴다
 }
-function playOpeningScene() {
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+// 대사를 던지기 전, 짝이 실제로 isNear() 안에 들어올 때까지(또는 시간 초과까지) 기다린다.
+// 안 붙은 채로 말하게 두면 화면엔 한 명만 서 있는데 "너 뭐 알아?" 처럼 상대를 부르는
+// 대사만 뜨는, 혼자 묻고 답하는 것 같은 장면이 나온다 — 이게 오류였다.
+function waitUntilNear(idA, idB, maxMs) {
+  return new Promise(resolve => {
+    const start = Date.now();
+    (function poll() {
+      if (isNear(idA, idB) || Date.now() - start > maxMs) return resolve();
+      setTimeout(poll, 150);
+    })();
+  });
+}
+function walkPairTogether(idA, idB) {
+  const sa = npcState[idA], sb = npcState[idB];
+  if (!sa || !sb || isNear(idA, idB)) return;
+  const path = findPath(sa.gx, sa.gy, sb.gx, sb.gy);
+  if (!path || path.length < 2) return;
+  sa.path = path.slice(0, -1); sa.step = 0; sa.moving = true; sa.mode = 'moving';   // 한 칸 앞에서 멈춰 겹쳐 서지 않는다
+}
+function nearestVillagerTo(id) {
+  const s = npcState[id]; if (!s) return null;
+  let best = null, bd = Infinity;
+  VILLAGERS.forEach(v => {
+    const vs = npcState[v.id]; if (!vs) return;
+    const d = Math.hypot(vs.gx - s.gx, vs.gy - s.gy);
+    if (d < bd) { bd = d; best = v; }
+  });
+  return best;
+}
+async function playOpeningScene() {
   const vills = VILLAGERS.filter(v => npcState[v.id]);
   const mates = NPCS().filter(c => npcState[c.id]);
   if (vills.length < 2 || !mates.length) return;
   const [vA, vB] = vills;
   const mate = mates[Math.floor(Math.random() * mates.length)];
-  const vC = vills[Math.floor(Math.random() * vills.length)];
+  const vC = nearestVillagerTo(mate.id) || vills[Math.floor(Math.random() * vills.length)];   // 최대한 가까운 동네 사람을 골라 거리를 줄인다
   const steps = [
     [vA.id, vB.id, 'gossip-raise'],
     [vB.id, vA.id, 'gossip-react'],
@@ -1670,11 +1717,16 @@ function playOpeningScene() {
     [vC.id, mate.id, 'recount-react'],
   ];
   // 장면이 진행되는 동안엔 배회 타이머를 늘려서, 대사 도중에 자리를 뜨지 않게 붙잡아 둔다.
-  const holdUntil = 1200 + steps.length * 2200;
+  const holdUntil = 1200 + steps.length * 2600;
   [vA.id, vB.id, mate.id, vC.id].forEach(id => { const s = npcState[id]; if (s) s.timer = Math.max(s.timer || 0, holdUntil / 16.667); });
-  steps.forEach(([speakerId, listenerId, kind], i) => {
-    setTimeout(() => runOpeningLine(speakerId, listenerId, kind), 1200 + i * 2200);
-  });
+  walkPairTogether(vA.id, vB.id);
+  walkPairTogether(mate.id, vC.id);
+  await sleep(1200);
+  for (const [speakerId, listenerId, kind] of steps) {
+    await waitUntilNear(speakerId, listenerId, 3000);   // 스폰이 멀면 최대 3초까지만 기다리고, 그래도 안 붙으면 그냥 진행한다
+    await runOpeningLine(speakerId, listenerId, kind);
+    await sleep(900);
+  }
 }
 
 // ── 게임 시작 ──────────────────────────────────────────────
