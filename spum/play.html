@@ -1304,11 +1304,13 @@ function harvest(speaker, text, askedHour = null) {
     const hs = parseHoursInSentence(sent);
     if (hs.length) {
       // "21시랑 22시엔 데크에 있었어"처럼 한 장소 앞에 시각이 여러 개 몰릴 수 있다 —
-      // 그 구간(이전 장소~이 장소) 안의 시각을 전부 이 장소에 붙인다. 가장 가까운 시각
-      // 하나만 골랐던 예전 방식은 21시를 통째로 빠뜨렸다.
+      // 그 구간(이전 방 위치 ~ 이 방 자기 위치 전까지) 안의 시각을 전부 이 방에 붙인다.
+      // 한국어는 늘 "시각+엔 방" 순서라 시각은 자기 방보다 앞에서만 찾는다 — 예전엔 상한을
+      // "다음 방 위치 전까지"로 잡아서, "21시엔 헛간, 22시엔 서재"처럼 두 방 사이에 낀
+      // 시각(22시)이 뒤 방(서재) 것인데도 앞 방(헛간)에 같이 붙어버렸다.
       rs.forEach(({ r, i }, idx) => {
         const segStart = idx > 0 ? rs[idx - 1].i : -Infinity;
-        const inSeg = hs.filter(h => h.i >= segStart && h.i < i + r.length + 100 && (idx === rs.length - 1 || h.i < rs[idx + 1].i));
+        const inSeg = hs.filter(h => h.i >= segStart && h.i < i);
         if (inSeg.length) inSeg.forEach(h => put(h.h, r, sent));
         else { const near = hs.reduce((a, b) => Math.abs(b.i - i) < Math.abs(a.i - i) ? b : a); put(near.h, r, sent); }
       });
